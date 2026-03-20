@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d0d1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Livroo">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>Livroo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,600;0,700;1,300;1,600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #0d0d1a;
+      --bg2:      #13131f;
+      --bg3:      #1a1a2e;
+      --card:     #16162a;
+      --border:   #2a2a45;
+      --border2:  #3a3a60;
+      --violet:   #7c5cbf;
+      --violet2:  #9b7fe8;
+      --violet3:  #c4aff5;
+      --rose:     #e87c8a;
+      --rose2:    #f5a8b4;
+      --gold:     #e8c56a;
+      --gold2:    #f5d98a;
+      --teal:     #5cc4b0;
+      --cream:    #f0ecff;
+      --text:     #d8d4f0;
+      --text2:    #8880b0;
+      --text3:    #504870;
+      --green:    #5cc48a;
+      --radius:   18px;
+      --safe-bot: env(safe-area-inset-bottom, 0px);
+    }
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow:hidden}
+
+    /* ── SCREENS ── */
+    .screen{position:fixed;inset:0;display:none;flex-direction:column;overflow:hidden}
+    .screen.active{display:flex}
+
+    /* ── SPLASH ── */
+    #splash{background:radial-gradient(ellipse at 50% 40%,#1e1040 0%,#0d0d1a 70%);justify-content:center;align-items:center;gap:18px;animation:fadeIn .5s ease}
+    .splash-icon{font-size:72px;animation:float 3s ease-in-out infinite}
+    .splash-logo{font-family:'Fraunces',serif;font-size:48px;font-weight:700;background:linear-gradient(135deg,var(--violet2),var(--rose),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .splash-tagline{font-size:13px;color:var(--text3);letter-spacing:3px;text-transform:uppercase}
+    .splash-bar{width:140px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:10px}
+    .splash-progress{height:100%;background:linear-gradient(90deg,var(--violet2),var(--rose));border-radius:2px;animation:progress 1.6s ease forwards}
+    @keyframes progress{from{width:0}to{width:100%}}
+    @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+    @keyframes fadeIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+
+    /* ── NAVBAR ── */
+    .navbar{background:rgba(13,13,26,.96);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;padding:8px 4px calc(8px + var(--safe-bot));position:fixed;bottom:0;left:0;right:0;z-index:100}
+    .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;cursor:pointer;border:none;background:none;color:var(--text3);font-family:'DM Sans',sans-serif;transition:all .2s}
+    .nav-btn.active{color:var(--violet2)}
+    .nav-btn .icon{font-size:22px;transition:transform .2s}
+    .nav-btn.active .icon{transform:scale(1.18)}
+    .nav-btn span{font-size:9px;font-weight:500;letter-spacing:.3px}
+    .nav-notif{position:relative}
+    .notif-dot{position:absolute;top:-2px;right:-4px;width:8px;height:8px;background:var(--rose);border-radius:50%;border:2px solid var(--bg)}
+
+    /* ── HEADER ── */
+    .header{padding:52px 20px 14px;background:linear-gradient(180deg,var(--bg2) 0%,transparent 100%);flex-shrink:0}
+    .header h1{font-family:'Fraunces',serif;font-size:26px;font-weight:600;color:var(--cream)}
+    .header p{font-size:12px;color:var(--text3);margin-top:2px}
+
+    /* ── SCROLL ── */
+    .scroll-area{flex:1;overflow-y:auto;padding:0 16px calc(90px + var(--safe-bot));-webkit-overflow-scrolling:touch}
+    .scroll-area::-webkit-scrollbar{display:none}
+
+    /* ── CARDS ── */
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px;overflow:hidden;position:relative}
+
+    /* ── BOOK CARD ── */
+    .book-card{display:flex;gap:14px;align-items:flex-start;cursor:pointer;transition:transform .15s}
+    .book-card:active{transform:scale(.97)}
+    .book-cover{width:58px;height:88px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:26px;border:1px solid var(--border2);overflow:hidden;position:relative}
+    .book-cover img{width:100%;height:100%;object-fit:cover}
+    .book-info{flex:1;min-width:0}
+    .book-title{font-family:'Fraunces',serif;font-size:16px;font-weight:600;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .book-author{font-size:12px;color:var(--text2);margin-top:2px}
+    .book-meta{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center}
+    .badge{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600}
+    .badge-lu{background:rgba(92,196,138,.15);color:#7de8a8;border:1px solid rgba(92,196,138,.25)}
+    .badge-encours{background:rgba(124,92,191,.2);color:var(--violet3);border:1px solid rgba(124,92,191,.35)}
+    .badge-alire{background:rgba(232,197,106,.12);color:var(--gold2);border:1px solid rgba(232,197,106,.25)}
+    .badge-coup{background:linear-gradient(135deg,rgba(232,124,138,.2),rgba(232,197,106,.2));color:var(--rose2);border:1px solid rgba(232,124,138,.3)}
+    .stars-display{color:var(--gold);font-size:12px}
+
+    /* ── FAB ── */
+    .fab{position:fixed;bottom:calc(72px + var(--safe-bot));right:18px;width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--violet2));border:none;font-size:24px;cursor:pointer;box-shadow:0 4px 20px rgba(124,92,191,.5);z-index:90;display:flex;align-items:center;justify-content:center;transition:transform .2s,box-shadow .2s;color:#fff}
+    .fab:active{transform:scale(.9)}
+
+    /* ── MODAL ── */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);z-index:200;display:none;align-items:flex-end}
+    .modal-overlay.open{display:flex;animation:slideUp .28s ease}
+    @keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+    .modal{background:var(--bg2);border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:24px 24px 0 0;padding:20px 20px calc(24px + var(--safe-bot));width:100%;max-height:92vh;overflow-y:auto}
+    .modal-handle{width:38px;height:4px;background:var(--border2);border-radius:2px;margin:0 auto 18px}
+    .modal h2{font-family:'Fraunces',serif;font-size:22px;color:var(--cream);margin-bottom:18px}
+
+    /* ── FORM ── */
+    .form-group{margin-bottom:14px}
+    .form-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:block}
+    .form-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;outline:none;transition:border-color .2s;-webkit-appearance:none}
+    .form-input:focus{border-color:var(--violet2)}
+    .form-input option{background:var(--bg3)}
+    textarea.form-input{resize:none;height:80px}
+    .star-picker{display:flex;gap:10px;margin-top:4px}
+    .star-btn{font-size:28px;cursor:pointer;transition:transform .15s;opacity:.25;border:none;background:none}
+    .star-btn.active{opacity:1;transform:scale(1.1)}
+    .btn-row{display:flex;gap:10px;margin-top:18px}
+    .btn{flex:1;padding:14px;border-radius:14px;border:none;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;cursor:pointer;transition:all .2s}
+    .btn-primary{background:linear-gradient(135deg,var(--violet),var(--violet2));color:#fff}
+    .btn-primary:active{transform:scale(.97)}
+    .btn-secondary{background:var(--bg3);color:var(--text2);border:1px solid var(--border)}
+    .btn-danger{background:rgba(232,124,138,.12);color:var(--rose);border:1px solid rgba(232,124,138,.25)}
+    .btn-gold{background:linear-gradient(135deg,rgba(232,197,106,.2),rgba(245,217,138,.25));color:var(--gold2);border:1px solid rgba(232,197,106,.3)}
+
+    /* ── SEARCH BAR ── */
+    .search-bar{display:flex;gap:8px;margin-bottom:14px}
+    .search-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none}
+    .search-input:focus{border-color:var(--violet2)}
+    .search-btn{background:var(--violet);border:none;border-radius:12px;padding:11px 16px;font-size:18px;cursor:pointer;color:#fff}
+
+    /* ── FILTER CHIPS ── */
+    .filter-chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:14px}
+    .filter-chips::-webkit-scrollbar{display:none}
+    .chip{padding:7px 16px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border);background:var(--bg3);color:var(--text2);white-space:nowrap;cursor:pointer;transition:all .2s;flex-shrink:0}
+    .chip.active{background:var(--violet);color:#fff;border-color:var(--violet)}
+
+    /* ── SEARCH RESULTS ── */
+    .search-result{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer}
+    .search-result:last-child{border-bottom:none}
+    .search-result-cover{width:44px;height:64px;border-radius:7px;object-fit:cover;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;overflow:hidden;border:1px solid var(--border)}
+    .search-result-cover img{width:100%;height:100%;object-fit:cover}
+    .search-result-info{flex:1}
+    .search-result-title{font-size:14px;color:var(--cream);font-weight:500}
+    .search-result-author{font-size:12px;color:var(--text2);margin-top:1px}
+    .choose-btn{padding:6px 12px;background:rgba(124,92,191,.2);color:var(--violet3);border:1px solid rgba(124,92,191,.3);border-radius:8px;font-size:12px;cursor:pointer;white-space:nowrap}
+
+    /* ── DASHBOARD ── */
+    .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 14px;text-align:center}
+    .stat-num{font-family:'Fraunces',serif;font-size:34px;font-weight:700;color:var(--violet2);line-height:1}
+    .stat-label{font-size:10px;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+    .genre-bar{margin-bottom:10px}
+    .genre-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px}
+    .genre-track{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
+    .genre-fill{height:100%;background:linear-gradient(90deg,var(--violet),var(--violet2));border-radius:3px;transition:width .6s ease}
+    .section-title{font-family:'Fraunces',serif;font-size:17px;font-weight:600;color:var(--cream);margin:20px 0 12px;display:flex;align-items:center;gap:8px}
+
+    /* ── GOAL WIDGET ── */
+    .goal-card{background:linear-gradient(135deg,rgba(124,92,191,.15),rgba(232,124,138,.1));border:1px solid rgba(124,92,191,.25);border-radius:var(--radius);padding:18px;margin-bottom:14px}
+    .goal-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .goal-title{font-family:'Fraunces',serif;font-size:16px;color:var(--cream)}
+    .goal-count{font-family:'Fraunces',serif;font-size:22px;color:var(--violet2)}
+    .goal-track{height:10px;background:var(--bg3);border-radius:5px;overflow:hidden}
+    .goal-fill{height:100%;background:linear-gradient(90deg,var(--violet),var(--rose));border-radius:5px;transition:width .8s ease}
+    .goal-sub{font-size:11px;color:var(--text3);margin-top:8px;text-align:right}
+
+    /* ── BADGES ── */
+    .badges-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+    .badge-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 10px;text-align:center;transition:all .2s}
+    .badge-card.unlocked{border-color:rgba(232,197,106,.35);background:rgba(232,197,106,.06)}
+    .badge-card.locked{opacity:.4;filter:grayscale(1)}
+    .badge-icon{font-size:28px;margin-bottom:6px}
+    .badge-name{font-size:10px;color:var(--text2);font-weight:500;line-height:1.3}
+    .badge-card.unlocked .badge-name{color:var(--gold2)}
+
+    /* ── SHELF ── */
+    .shelf{background:linear-gradient(180deg,#1e1535 0%,#14102a 100%);border-radius:14px;padding:18px 14px 12px;margin-bottom:20px;border:1px solid #2a2050;position:relative;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+    .shelf::after{content:'';position:absolute;bottom:0;left:0;right:0;height:9px;background:linear-gradient(90deg,#2a2050,#3d3070,#2a2050);border-radius:0 0 14px 14px}
+    .shelf-books{display:flex;gap:5px;align-items:flex-end;min-height:110px;flex-wrap:wrap}
+    .shelf-book{width:38px;border-radius:4px 6px 6px 4px;background:var(--color,#4a3080);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s;position:relative;flex-shrink:0;box-shadow:2px 2px 8px rgba(0,0,0,.5);overflow:hidden}
+    .shelf-book:active{transform:translateY(-8px)}
+    .shelf-book .spine-title{writing-mode:vertical-rl;font-size:8px;color:rgba(255,255,255,.65);font-family:'Fraunces',serif;overflow:hidden;max-height:80%;padding:4px 0;white-space:nowrap;text-overflow:clip;position:relative;z-index:1}
+    .shelf-empty{font-size:12px;color:var(--text3);text-align:center;width:100%;padding:20px 0;font-style:italic}
+
+    /* ── FRIENDS / SOCIAL ── */
+    .friend-card{display:flex;align-items:center;gap:14px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:16px;margin-bottom:10px}
+    .friend-avatar{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;font-family:'Fraunces',serif;color:#fff;font-weight:700}
+    .friend-info{flex:1}
+    .friend-name{font-size:15px;color:var(--cream);font-weight:500}
+    .friend-sub{font-size:12px;color:var(--text3);margin-top:2px}
+    .friend-action{padding:7px 14px;border-radius:10px;font-size:12px;border:none;cursor:pointer;font-family:'DM Sans'}
+
+    /* ── ACTIVITY FEED ── */
+    .activity-item{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border)}
+    .activity-item:last-child{border-bottom:none}
+    .activity-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:#fff;font-weight:700;font-family:'Fraunces',serif}
+    .activity-text{flex:1;font-size:13px;color:var(--text2);line-height:1.5}
+    .activity-text strong{color:var(--cream)}
+    .activity-time{font-size:10px;color:var(--text3);margin-top:2px}
+    .activity-book-mini{display:flex;gap:8px;align-items:center;margin-top:8px;padding:8px 10px;background:var(--bg3);border-radius:10px;border:1px solid var(--border);cursor:pointer}
+    .activity-book-mini-cover{width:30px;height:44px;border-radius:4px;overflow:hidden;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+    .activity-book-mini-cover img{width:100%;height:100%;object-fit:cover}
+
+    /* ── RECO CARD ── */
+    .reco-card{background:linear-gradient(135deg,rgba(232,124,138,.1),rgba(124,92,191,.1));border:1px solid rgba(232,124,138,.2);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+    .reco-from{font-size:11px;color:var(--rose2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;font-weight:600}
+    .reco-book{display:flex;gap:12px;align-items:center}
+    .reco-cover{width:50px;height:74px;border-radius:8px;overflow:hidden;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px solid var(--border2);flex-shrink:0}
+    .reco-cover img{width:100%;height:100%;object-fit:cover}
+    .reco-info{flex:1}
+    .reco-title{font-family:'Fraunces',serif;font-size:15px;color:var(--cream)}
+    .reco-author{font-size:12px;color:var(--text2);margin-top:2px}
+    .reco-msg{font-size:12px;color:var(--text2);margin-top:6px;font-style:italic;line-height:1.4}
+    .reco-actions{display:flex;gap:8px;margin-top:10px}
+    .reco-btn{flex:1;padding:8px;border-radius:10px;font-size:12px;border:none;cursor:pointer;font-family:'DM Sans';font-weight:500}
+    .reco-add{background:rgba(124,92,191,.2);color:var(--violet3);border:1px solid rgba(124,92,191,.3)}
+    .reco-dismiss{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
+
+    /* ── MY CODE ── */
+    .my-code-box{background:var(--bg3);border:2px dashed var(--border2);border-radius:16px;padding:20px;text-align:center;margin-bottom:20px}
+    .my-code-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+    .my-code{font-family:'Fraunces',serif;font-size:32px;font-weight:700;color:var(--violet2);letter-spacing:6px}
+    .my-code-sub{font-size:12px;color:var(--text3);margin-top:8px}
+    .share-btns{display:flex;gap:8px;margin-top:14px;justify-content:center}
+    .share-btn{padding:10px 18px;border-radius:12px;font-size:13px;border:none;cursor:pointer;font-family:'DM Sans';font-weight:500;display:flex;align-items:center;gap:6px;transition:all .2s}
+    .share-btn:active{transform:scale(.95)}
+    .share-copy{background:rgba(124,92,191,.2);color:var(--violet3);border:1px solid rgba(124,92,191,.3)}
+    .share-native{background:linear-gradient(135deg,var(--violet),var(--violet2));color:#fff}
+
+    /* ── CITATIONS ── */
+    .quote-card{background:linear-gradient(135deg,rgba(92,196,176,.08),rgba(124,92,191,.08));border:1px solid rgba(92,196,176,.2);border-radius:var(--radius);padding:18px;margin-bottom:12px;position:relative}
+    .quote-mark{font-family:'Fraunces',serif;font-size:48px;color:var(--teal);opacity:.2;position:absolute;top:8px;left:14px;line-height:1}
+    .quote-text{font-family:'Fraunces',serif;font-size:14px;font-style:italic;color:var(--cream);line-height:1.7;padding-left:6px;margin-bottom:10px;position:relative;z-index:1}
+    .quote-source{font-size:11px;color:var(--text3)}
+    .quote-source strong{color:var(--text2)}
+
+    /* ── DETAIL ── */
+    .detail-cover{width:110px;height:162px;border-radius:12px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:50px;overflow:hidden;border:1px solid var(--border2);box-shadow:0 12px 32px rgba(0,0,0,.5)}
+    .detail-cover img{width:100%;height:100%;object-fit:cover}
+    .detail-title{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--cream);text-align:center;margin-bottom:4px}
+    .detail-author{font-size:14px;color:var(--text2);text-align:center;margin-bottom:16px}
+    .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+    .detail-item{background:var(--bg3);border-radius:12px;padding:10px 12px}
+    .detail-key{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+    .detail-val{font-size:14px;color:var(--text);margin-top:2px}
+    .resume-box{background:var(--bg3);border-radius:12px;padding:14px;font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:14px}
+    .coup-toggle{display:flex;align-items:center;gap:10px;padding:12px 14px;background:linear-gradient(135deg,rgba(232,124,138,.1),rgba(232,197,106,.08));border:1px solid rgba(232,124,138,.2);border-radius:12px;cursor:pointer;margin-bottom:10px}
+    .coup-toggle-text{flex:1;font-size:13px;color:var(--text2)}
+    .coup-toggle-icon{font-size:20px}
+
+    /* ── EMPTY / LOADING ── */
+    .empty{text-align:center;padding:50px 20px}
+    .empty-icon{font-size:56px;margin-bottom:14px;opacity:.4}
+    .empty-title{font-family:'Fraunces',serif;font-size:20px;color:var(--text2);margin-bottom:8px}
+    .empty-sub{font-size:13px;color:var(--text3)}
+    .loading{display:flex;align-items:center;gap:8px;color:var(--text3);font-size:13px;padding:14px 0}
+    .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--violet2);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── TOAST ── */
+    .toast{position:fixed;bottom:calc(80px + var(--safe-bot));left:50%;transform:translateX(-50%) translateY(16px);background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:10px 20px;font-size:13px;color:var(--text);z-index:400;opacity:0;transition:all .28s;white-space:nowrap;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+    /* ── DIVIDER ── */
+    .divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--text3);font-size:11px}
+    .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+    /* ── PROFILE HEADER ── */
+    .profile-banner{background:linear-gradient(135deg,rgba(124,92,191,.2),rgba(232,124,138,.15));border:1px solid rgba(124,92,191,.25);border-radius:var(--radius);padding:20px;margin-bottom:16px;text-align:center}
+    .profile-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;font-weight:700;font-family:'Fraunces',serif;color:#fff}
+    .profile-name{font-family:'Fraunces',serif;font-size:20px;color:var(--cream)}
+    .profile-stats{display:flex;justify-content:center;gap:24px;margin-top:12px}
+    .profile-stat{text-align:center}
+    .profile-stat-num{font-family:'Fraunces',serif;font-size:20px;color:var(--violet2)}
+    .profile-stat-label{font-size:10px;color:var(--text3);text-transform:uppercase}
+
+    /* ── INPUT FRIEND CODE ── */
+    .code-input{width:100%;background:var(--bg3);border:2px solid var(--border);border-radius:14px;padding:16px 14px;color:var(--violet2);font-family:'Fraunces',serif;font-size:24px;outline:none;transition:border-color .2s;text-align:center;letter-spacing:6px;font-weight:700;-webkit-appearance:none}
+    .code-input:focus{border-color:var(--violet2)}
+    .code-input::placeholder{color:var(--text3);letter-spacing:2px;font-size:18px}
+  </style>
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash" class="screen active">
+  <div class="splash-icon">📚</div>
+  <div class="splash-logo">Livroo</div>
+  <div class="splash-tagline">Votre vie en livres</div>
+  <div class="splash-bar"><div class="splash-progress"></div></div>
+</div>
+
+<!-- ═══ LECTURES ═══ -->
+<div id="screen-lectures" class="screen">
+  <div class="header">
+    <h1>Mes Lectures</h1>
+    <p id="count-label">…</p>
+  </div>
+  <div class="scroll-area">
+    <div class="filter-chips" id="filter-chips">
+      <div class="chip active" data-filter="tous">Tous</div>
+      <div class="chip" data-filter="Lu">✅ Lus</div>
+      <div class="chip" data-filter="En cours">📖 En cours</div>
+      <div class="chip" data-filter="À lire">🔖 À lire</div>
+      <div class="chip" data-filter="coup">💖 Coups de cœur</div>
+    </div>
+    <div id="books-list"></div>
+  </div>
+  <button class="fab" id="fab-add">＋</button>
+</div>
+
+<!-- ═══ DASHBOARD ═══ -->
+<div id="screen-dashboard" class="screen">
+  <div class="header">
+    <h1>Tableau de Bord</h1>
+    <p>Votre univers de lecture</p>
+  </div>
+  <div class="scroll-area" id="dashboard-content"></div>
+</div>
+
+<!-- ═══ ÉTAGÈRE ═══ -->
+<div id="screen-shelf" class="screen">
+  <div class="header">
+    <h1>Mon Étagère</h1>
+    <p>Votre bibliothèque virtuelle</p>
+  </div>
+  <div class="scroll-area" id="shelf-content"></div>
+</div>
+
+<!-- ═══ SOCIAL ═══ -->
+<div id="screen-social" class="screen">
+  <div class="header">
+    <h1>Mes Amis</h1>
+    <p id="social-subtitle">Lectures partagées</p>
+  </div>
+  <div class="scroll-area" id="social-content"></div>
+</div>
+
+<!-- ═══ PROFIL ═══ -->
+<div id="screen-profil" class="screen">
+  <div class="header">
+    <h1>Mon Profil</h1>
+    <p>Citations & badges</p>
+  </div>
+  <div class="scroll-area" id="profil-content"></div>
+</div>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <button class="nav-btn active" data-screen="lectures"><span class="icon">📖</span><span>Lectures</span></button>
+  <button class="nav-btn" data-screen="dashboard"><span class="icon">📊</span><span>Stats</span></button>
+  <button class="nav-btn" data-screen="shelf"><span class="icon">🏛️</span><span>Étagère</span></button>
+  <button class="nav-btn nav-notif" data-screen="social"><span class="icon">👥</span><span id="notif-dot-wrap">Amis</span></button>
+  <button class="nav-btn" data-screen="profil"><span class="icon">✨</span><span>Profil</span></button>
+</nav>
+
+<!-- ═══ MODAL: AJOUTER/MODIFIER ═══ -->
+<div class="modal-overlay" id="modal-add">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2 id="modal-title">Ajouter un livre</h2>
+    <div class="form-group">
+      <label class="form-label">🔍 Recherche automatique</label>
+      <div class="search-bar">
+        <input class="search-input" id="search-api" placeholder="Titre ou auteur…">
+        <button class="search-btn" id="search-api-btn">🔍</button>
+      </div>
+      <div id="api-results"></div>
+    </div>
+    <div class="divider">ou saisir manuellement</div>
+    <div class="form-group"><label class="form-label">Titre *</label><input class="form-input" id="f-titre" placeholder="Ex : Le Petit Prince"></div>
+    <div class="form-group"><label class="form-label">Auteur</label><input class="form-input" id="f-auteur" placeholder="Ex : Antoine de Saint-Exupéry"></div>
+    <div class="form-group"><label class="form-label">Genre</label>
+      <select class="form-input" id="f-genre">
+        <option value="">— Choisir —</option>
+        <option>Thriller</option><option>Roman noir</option><option>Romance</option>
+        <option>Horreur</option><option>Fantasy</option><option>Sci-Fi</option>
+        <option>Policier</option><option>Biographie</option><option>Roman</option>
+        <option>Développement personnel</option><option>Essai</option><option>Autre</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Statut</label>
+      <select class="form-input" id="f-statut">
+        <option>À lire</option><option>En cours</option><option>Lu</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">Ma note</label>
+      <div class="star-picker" id="star-picker">
+        <button class="star-btn" data-v="1">⭐</button>
+        <button class="star-btn" data-v="2">⭐</button>
+        <button class="star-btn" data-v="3">⭐</button>
+        <button class="star-btn" data-v="4">⭐</button>
+        <button class="star-btn" data-v="5">⭐</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">💖 Coup de cœur ?</label>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-secondary" id="coup-no" style="flex:1">Non</button>
+        <button class="btn btn-gold" id="coup-yes" style="flex:1">💖 Oui !</button>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Résumé</label><textarea class="form-input" id="f-resume" placeholder="Vos impressions…"></textarea></div>
+    <div class="form-group"><label class="form-label">Citation favorite</label><textarea class="form-input" id="f-citation" placeholder="Une phrase qui vous a marqué…"></textarea></div>
+    <div class="form-group"><label class="form-label">Pages</label><input class="form-input" id="f-pages" type="number" placeholder="Ex : 350"></div>
+    <div class="form-group"><label class="form-label">Date de lecture</label><input class="form-input" id="f-date" type="date"></div>
+    <div class="form-group"><label class="form-label">Éditeur</label><input class="form-input" id="f-editeur" placeholder="Ex : Gallimard"></div>
+    <input type="hidden" id="f-cover"><input type="hidden" id="f-id">
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="btn-cancel">Annuler</button>
+      <button class="btn btn-primary" id="btn-save">💾 Enregistrer</button>
+    </div>
+    <div class="btn-row" id="btn-delete-row" style="display:none">
+      <button class="btn btn-danger" id="btn-delete">🗑️ Supprimer ce livre</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: DÉTAIL ═══ -->
+<div class="modal-overlay" id="modal-detail">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div id="detail-content"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="detail-close">Fermer</button>
+      <button class="btn btn-primary" id="detail-edit">✏️ Modifier</button>
+    </div>
+    <div class="btn-row" id="detail-reco-row" style="display:none">
+      <button class="btn btn-gold" id="detail-reco">💌 Recommander à un ami</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: RECOMMANDER ═══ -->
+<div class="modal-overlay" id="modal-reco">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>💌 Recommander</h2>
+    <div id="reco-book-info" style="margin-bottom:16px"></div>
+    <div class="form-group">
+      <label class="form-label">Choisir un ami</label>
+      <div id="reco-friends-list"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Message (optionnel)</label>
+      <textarea class="form-input" id="reco-msg" placeholder="Dis-leur pourquoi tu adores ce livre…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="reco-cancel">Annuler</button>
+      <button class="btn btn-gold" id="reco-send">💌 Envoyer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: AJOUTER UN AMI ═══ -->
+<div class="modal-overlay" id="modal-add-friend">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>➕ Ajouter un ami</h2>
+    <div class="my-code-box">
+      <div class="my-code-label">Mon code d'invitation</div>
+      <div class="my-code" id="my-code-display">……</div>
+      <div class="my-code-sub">Partagez ce code à vos amis pour qu'ils vous ajoutent</div>
+      <div class="share-btns">
+        <button class="share-btn share-copy" id="copy-code-btn">📋 Copier</button>
+        <button class="share-btn share-native" id="share-code-btn">📤 Partager</button>
+      </div>
+    </div>
+    <div class="divider">Entrer le code d'un ami</div>
+    <div class="form-group">
+      <label class="form-label">Code ami</label>
+      <input class="code-input" id="friend-code-input" placeholder="EX : ABC123" maxlength="6">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Prénom de l'ami</label>
+      <input class="form-input" id="friend-name-input" placeholder="Ex : Sophie">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="add-friend-cancel">Annuler</button>
+      <button class="btn btn-primary" id="add-friend-confirm">✅ Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: OBJECTIF ═══ -->
+<div class="modal-overlay" id="modal-goal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>🎯 Objectif de lecture</h2>
+    <div class="form-group">
+      <label class="form-label">Nombre de livres à lire en <span id="goal-year">2025</span></label>
+      <input class="form-input" id="goal-input" type="number" min="1" max="365" placeholder="Ex : 12">
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="goal-cancel">Annuler</button>
+      <button class="btn btn-primary" id="goal-save">🎯 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: AJOUTER CITATION ═══ -->
+<div class="modal-overlay" id="modal-quote">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>📖 Nouvelle citation</h2>
+    <div class="form-group"><label class="form-label">Citation</label><textarea class="form-input" id="q-text" style="height:100px" placeholder="La phrase qui vous a touché…"></textarea></div>
+    <div class="form-group"><label class="form-label">Livre</label><input class="form-input" id="q-book" placeholder="Titre du livre"></div>
+    <div class="form-group"><label class="form-label">Auteur</label><input class="form-input" id="q-author" placeholder="Auteur"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="quote-cancel">Annuler</button>
+      <button class="btn btn-primary" id="quote-save">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════
+// DB
+// ════════════════════════════════════════════
+const DB = {
+  get(k,d=[]){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},
+  set(k,v){localStorage.setItem(k,JSON.stringify(v))},
+  books(){return this.get('lv_books')},
+  saveBooks(d){this.set('lv_books',d)},
+  friends(){return this.get('lv_friends')},
+  saveFriends(d){this.set('lv_friends',d)},
+  recos(){return this.get('lv_recos')},
+  saveRecos(d){this.set('lv_recos',d)},
+  quotes(){return this.get('lv_quotes')},
+  saveQuotes(d){this.set('lv_quotes',d)},
+  goal(){return this.get('lv_goal',{target:0,year:new Date().getFullYear()})},
+  saveGoal(d){this.set('lv_goal',d)},
+  myCode(){
+    let c=localStorage.getItem('lv_mycode');
+    if(!c){c=Math.random().toString(36).substring(2,8).toUpperCase();localStorage.setItem('lv_mycode',c);}
+    return c;
+  },
+  userName(){return localStorage.getItem('lv_username')||'Moi'},
+};
+
+// ════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════
+let filter='tous', note=0, editId=null, detailBook=null, recoBook=null, isCoup=false;
+
+// ════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
+function $id(id){return document.getElementById(id)}
+const COLORS=['#3d2a6a','#2a3d6a','#2a6a4a','#6a2a3d','#4a3d2a','#2a4a6a','#5a2a6a','#2a6a5a'];
+function bookColor(t){let h=0;for(const c of(t||''))h=(h*31+c.charCodeAt(0))%COLORS.length;return COLORS[Math.abs(h)]}
+function starsHTML(n){return'⭐'.repeat(n||0)}
+function statusBadge(s){
+  if(s==='Lu')return'<span class="badge badge-lu">✅ Lu</span>';
+  if(s==='En cours')return'<span class="badge badge-encours">📖 En cours</span>';
+  return'<span class="badge badge-alire">🔖 À lire</span>';
+}
+function fmtDate(d){if(!d)return'—';return new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}
+function timeAgo(ts){const m=Math.floor((Date.now()-ts)/60000);if(m<1)return'À l\'instant';if(m<60)return`Il y a ${m}min`;const h=Math.floor(m/60);if(h<24)return`Il y a ${h}h`;return`Il y a ${Math.floor(h/24)}j`}
+
+// ════════════════════════════════════════════
+// NAV
+// ════════════════════════════════════════════
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  $id('screen-'+name).classList.add('active');
+  document.querySelector(`[data-screen="${name}"]`).classList.add('active');
+  ({lectures:renderBooks,dashboard:renderDashboard,shelf:renderShelf,social:renderSocial,profil:renderProfil})[name]?.();
+}
+document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>showScreen(b.dataset.screen)));
+
+// ════════════════════════════════════════════
+// BOOKS LIST
+// ════════════════════════════════════════════
+function renderBooks(){
+  let books=DB.books();
+  if(filter==='coup')books=books.filter(b=>b.coup);
+  else if(filter!=='tous')books=books.filter(b=>b.statut===filter);
+  const all=DB.books();
+  $id('count-label').textContent=`${all.length} livre${all.length!==1?'s':''} enregistré${all.length!==1?'s':''}`;
+  const el=$id('books-list');
+  if(!books.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">${filter==='coup'?'💖':'📭'}</div><div class="empty-title">${filter==='coup'?'Aucun coup de cœur':'Aucun livre ici'}</div><div class="empty-sub">Appuyez sur ＋ pour ajouter votre premier livre</div></div>`;
+    return;
+  }
+  el.innerHTML=books.map(b=>`
+    <div class="card book-card" onclick="openDetail('${b.id}')">
+      <div class="book-cover" style="background:${bookColor(b.titre)}">
+        ${b.cover?`<img src="${b.cover}" onerror="this.style.display='none'">`:'📖'}
+      </div>
+      <div class="book-info">
+        <div class="book-title">${b.titre||'Sans titre'}</div>
+        <div class="book-author">${b.auteur||'Auteur inconnu'}</div>
+        <div class="book-meta">
+          ${statusBadge(b.statut)}
+          ${b.coup?'<span class="badge badge-coup">💖 Coup de cœur</span>':''}
+          ${b.note?`<span class="stars-display">${starsHTML(b.note)}</span>`:''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+document.querySelectorAll('.chip').forEach(c=>{
+  c.addEventListener('click',()=>{
+    document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));
+    c.classList.add('active');filter=c.dataset.filter;renderBooks();
+  });
+});
+
+// ════════════════════════════════════════════
+// DASHBOARD
+// ════════════════════════════════════════════
+function renderDashboard(){
+  const books=DB.books();
+  const lus=books.filter(b=>b.statut==='Lu');
+  const encours=books.filter(b=>b.statut==='En cours');
+  const alire=books.filter(b=>b.statut==='À lire');
+  const coups=books.filter(b=>b.coup);
+  const noted=lus.filter(b=>b.note);
+  const avg=noted.length?(noted.reduce((s,b)=>s+b.note,0)/noted.length).toFixed(1):'—';
+  const auteurs=books.reduce((m,b)=>{if(b.auteur)m[b.auteur]=(m[b.auteur]||0)+1;return m},{});
+  const favAut=Object.keys(auteurs).length?Object.keys(auteurs).reduce((a,b)=>auteurs[a]>auteurs[b]?a:b):'—';
+  const genres=books.reduce((m,b)=>{if(b.genre)m[b.genre]=(m[b.genre]||0)+1;return m},{});
+  const pages=lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0);
+  const goal=DB.goal();
+  const goalPct=goal.target?Math.min(100,Math.round(lus.length/goal.target*100)):0;
+  const maxG=Math.max(1,...Object.values(genres));
+  const genreList=['Thriller','Roman noir','Romance','Horreur','Fantasy','Sci-Fi','Policier','Biographie','Roman','Développement personnel','Essai','Autre'];
+
+  $id('dashboard-content').innerHTML=`
+    ${goal.target?`
+    <div class="goal-card">
+      <div class="goal-top">
+        <div class="goal-title">🎯 Objectif ${goal.year}</div>
+        <div class="goal-count">${lus.length} / ${goal.target}</div>
+      </div>
+      <div class="goal-track"><div class="goal-fill" style="width:${goalPct}%"></div></div>
+      <div class="goal-sub">${goalPct}% — ${Math.max(0,goal.target-lus.length)} livre${goal.target-lus.length!==1?'s':''} restant${goal.target-lus.length!==1?'s':''}</div>
+    </div>
+    `:`
+    <div class="card" style="text-align:center;padding:18px;cursor:pointer;border-style:dashed" onclick="openGoalModal()">
+      <div style="font-size:28px;margin-bottom:8px">🎯</div>
+      <div style="font-family:'Fraunces',serif;font-size:16px;color:var(--cream)">Définir un objectif annuel</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Combien de livres souhaitez-vous lire cette année ?</div>
+    </div>`}
+
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-num">${lus.length}</div><div class="stat-label">📚 Lus</div></div>
+      <div class="stat-card"><div class="stat-num">${avg}</div><div class="stat-label">⭐ Note moy.</div></div>
+      <div class="stat-card"><div class="stat-num">${encours.length}</div><div class="stat-label">📖 En cours</div></div>
+      <div class="stat-card"><div class="stat-num">${coups.length}</div><div class="stat-label">💖 Coups de cœur</div></div>
+    </div>
+
+    ${pages>0?`<div class="card" style="text-align:center;padding:16px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">📄 Pages lues</div><div style="font-family:'Fraunces',serif;font-size:38px;color:var(--violet2);margin-top:4px">${pages.toLocaleString('fr-FR')}</div></div>`:''}
+    ${favAut!=='—'?`<div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">✍️ Auteur favori</div><div style="font-family:'Fraunces',serif;font-size:18px;color:var(--cream)">${favAut}</div><div style="font-size:12px;color:var(--text3)">${auteurs[favAut]} livre${auteurs[favAut]>1?'s':''}</div></div>`:''}
+
+    <div class="section-title">📊 Genres</div>
+    ${genreList.filter(g=>genres[g]).map(g=>`
+      <div class="genre-bar">
+        <div class="genre-label"><span>${g}</span><span>${genres[g]}</span></div>
+        <div class="genre-track"><div class="genre-fill" style="width:${genres[g]/maxG*100}%"></div></div>
+      </div>`).join('')}
+    ${!Object.keys(genres).length?'<div style="color:var(--text3);font-size:13px;text-align:center;padding:16px">Aucune donnée pour l\'instant</div>':''}
+    ${goal.target&&goalPct>=100?`<div class="card" style="text-align:center;padding:20px;background:linear-gradient(135deg,rgba(92,196,138,.1),rgba(232,197,106,.1));border-color:rgba(232,197,106,.3)"><div style="font-size:36px;margin-bottom:8px">🏆</div><div style="font-family:'Fraunces',serif;font-size:18px;color:var(--gold2)">Objectif atteint !</div><div style="font-size:13px;color:var(--text3);margin-top:6px">Félicitations — vous avez lu ${lus.length} livre${lus.length>1?'s':''} cette année !</div></div>`:''}
+  `;
+}
+
+function openGoalModal(){
+  $id('goal-year').textContent=new Date().getFullYear();
+  const g=DB.goal();
+  $id('goal-input').value=g.target||'';
+  $id('modal-goal').classList.add('open');
+}
+$id('goal-cancel').addEventListener('click',()=>$id('modal-goal').classList.remove('open'));
+$id('goal-save').addEventListener('click',()=>{
+  const t=parseInt($id('goal-input').value);
+  if(!t||t<1){toast('⚠️ Entrez un nombre valide');return;}
+  DB.saveGoal({target:t,year:new Date().getFullYear()});
+  $id('modal-goal').classList.remove('open');
+  toast('🎯 Objectif enregistré !');
+  renderDashboard();
+});
+
+// ════════════════════════════════════════════
+// SHELF
+// ════════════════════════════════════════════
+function renderShelf(){
+  const books=DB.books();
+  const sections=[{label:'📚 Lus',filter:b=>b.statut==='Lu'},{label:'📖 En cours',filter:b=>b.statut==='En cours'},{label:'🔖 À lire',filter:b=>b.statut==='À lire'}];
+  $id('shelf-content').innerHTML=sections.map(({label,filter})=>{
+    const list=books.filter(filter);
+    const booksHTML=list.length?list.map(b=>{
+      const h=20+Math.min(50,(parseInt(b.pages)||150)/10);
+      return`<div class="shelf-book" style="--color:${bookColor(b.titre)};height:${60+h}px" onclick="openDetail('${b.id}')" title="${b.titre}">
+        ${b.cover?`<img src="${b.cover}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:4px 6px 6px 4px;opacity:.75" onerror="this.remove()">`:'' }
+        <span class="spine-title">${b.titre}</span>
+      </div>`;
+    }).join(''):`<div class="shelf-empty">Aucun livre ici</div>`;
+    return`<div class="section-title">${label} <span style="font-size:12px;color:var(--text3);font-family:'DM Sans'">${list.length}</span></div>
+    <div class="shelf"><div class="shelf-books">${booksHTML}</div></div>`;
+  }).join('');
+}
+
+// ════════════════════════════════════════════
+// SOCIAL
+// ════════════════════════════════════════════
+function renderSocial(){
+  const friends=DB.friends();
+  const recos=DB.recos().filter(r=>r.to==='me'&&!r.dismissed);
+  $id('social-subtitle').textContent=`${friends.length} ami${friends.length!==1?'s':''}`;
+
+  // Update notif dot
+  const dot=$id('notif-dot-wrap');
+  dot.innerHTML=recos.length?`Amis <span style="display:inline-block;width:8px;height:8px;background:var(--rose);border-radius:50%;margin-left:3px;vertical-align:middle"></span>`:'Amis';
+
+  let html='';
+
+  // Recos received
+  if(recos.length){
+    html+=`<div class="section-title">💌 Recommandations reçues <span style="background:var(--rose);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-family:'DM Sans';font-weight:600">${recos.length}</span></div>`;
+    html+=recos.map(r=>`
+      <div class="reco-card">
+        <div class="reco-from">💌 ${r.fromName} vous recommande :</div>
+        <div class="reco-book">
+          <div class="reco-cover" style="background:${bookColor(r.book.titre)}">${r.book.cover?`<img src="${r.book.cover}" onerror="this.style.display='none'">`:'📖'}</div>
+          <div class="reco-info">
+            <div class="reco-title">${r.book.titre}</div>
+            <div class="reco-author">${r.book.auteur||'—'}</div>
+            ${r.msg?`<div class="reco-msg">"${r.msg}"</div>`:''}
+          </div>
+        </div>
+        <div class="reco-actions">
+          <button class="reco-btn reco-add" onclick="addFromReco('${r.id}')">📚 Ajouter à ma liste</button>
+          <button class="reco-btn reco-dismiss" onclick="dismissReco('${r.id}')">✕</button>
+        </div>
+      </div>`).join('');
+  }
+
+  // Add friend button
+  html+=`<button class="btn btn-primary" style="width:100%;margin-bottom:16px" onclick="$id('modal-add-friend').classList.add('open');renderMyCode()">➕ Ajouter un ami</button>`;
+
+  // Friends list
+  if(friends.length){
+    html+=`<div class="section-title">👥 Mes amis</div>`;
+    html+=friends.map(f=>`
+      <div class="friend-card">
+        <div class="friend-avatar">${f.name[0]?.toUpperCase()||'?'}</div>
+        <div class="friend-info">
+          <div class="friend-name">${f.name}</div>
+          <div class="friend-sub">Code : ${f.code}</div>
+        </div>
+        <button class="friend-action" style="background:rgba(232,124,138,.15);color:var(--rose);border:1px solid rgba(232,124,138,.25)" onclick="removeFriend('${f.id}')">Retirer</button>
+      </div>`).join('');
+  }
+
+  // Activity feed (simulated)
+  const feed=buildFeed();
+  if(feed.length){
+    html+=`<div class="section-title">📡 Activité récente</div>`;
+    html+=`<div class="card">${feed.map(f=>`
+      <div class="activity-item">
+        <div class="activity-avatar">${f.avatar}</div>
+        <div style="flex:1">
+          <div class="activity-text">${f.text}</div>
+          <div class="activity-time">${f.time}</div>
+          ${f.book?`<div class="activity-book-mini" onclick="openDetail('${f.book.id}')">
+            <div class="activity-book-mini-cover" style="background:${bookColor(f.book.titre)}">${f.book.cover?`<img src="${f.book.cover}" onerror="this.style.display='none'">`:'📖'}</div>
+            <div><div style="font-size:13px;color:var(--cream)">${f.book.titre}</div><div style="font-size:11px;color:var(--text3)">${f.book.auteur||''}</div></div>
+          </div>`:''}
+        </div>
+      </div>`).join('')}</div>`;
+  }
+
+  if(!friends.length&&!recos.length){
+    html+=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Pas encore d'amis</div><div class="empty-sub">Ajoutez des amis pour partager vos lectures et recommandations !</div></div>`;
+  }
+
+  $id('social-content').innerHTML=html;
+}
+
+function buildFeed(){
+  const books=DB.books().filter(b=>b.statut==='Lu').slice(0,3);
+  const friends=DB.friends();
+  if(!books.length||!friends.length)return[];
+  return books.map((b,i)=>({
+    avatar:friends[i%friends.length]?.name[0]?.toUpperCase()||'?',
+    text:`<strong>${friends[i%friends.length]?.name||'Ami'}</strong> a terminé un livre`,
+    time:timeAgo(Date.now()-i*3600000*2),
+    book:b
+  }));
+}
+
+function addFromReco(id){
+  const recos=DB.recos();
+  const r=recos.find(x=>x.id===id);
+  if(!r)return;
+  const books=DB.books();
+  const book={...r.book,id:Date.now().toString(),statut:'À lire',note:null,coup:false};
+  books.unshift(book);
+  DB.saveBooks(books);
+  r.dismissed=true;
+  DB.saveRecos(recos);
+  toast('📚 Ajouté à votre liste !');
+  renderSocial();
+}
+
+function dismissReco(id){
+  const recos=DB.recos();
+  const r=recos.find(x=>x.id===id);
+  if(r)r.dismissed=true;
+  DB.saveRecos(recos);
+  renderSocial();
+}
+
+function removeFriend(id){
+  if(!confirm('Retirer cet ami ?'))return;
+  DB.saveFriends(DB.friends().filter(f=>f.id!==id));
+  toast('Ami retiré');
+  renderSocial();
+}
+
+function renderMyCode(){
+  $id('my-code-display').textContent=DB.myCode();
+}
+
+$id('copy-code-btn').addEventListener('click',()=>{
+  navigator.clipboard?.writeText(DB.myCode()).then(()=>toast('📋 Code copié !')).catch(()=>{
+    const code=DB.myCode();
+    $id('my-code-display').style.userSelect='all';
+    toast('Code : '+code);
+  });
+});
+
+$id('share-code-btn').addEventListener('click',()=>{
+  const code=DB.myCode();
+  if(navigator.share){navigator.share({title:'Livroo — rejoins-moi !',text:`Mon code Livroo : ${code} — rejoins-moi pour partager nos lectures !`}).catch(()=>{})}
+  else{navigator.clipboard?.writeText(`Mon code Livroo : ${code}`);toast('📋 Lien copié !');}
+});
+
+$id('add-friend-cancel').addEventListener('click',()=>$id('modal-add-friend').classList.remove('open'));
+$id('add-friend-confirm').addEventListener('click',()=>{
+  const code=$id('friend-code-input').value.trim().toUpperCase();
+  const name=$id('friend-name-input').value.trim();
+  if(!code||code.length<4){toast('⚠️ Code invalide');return;}
+  if(!name){toast('⚠️ Entrez un prénom');return;}
+  if(code===DB.myCode()){toast('⚠️ C\'est votre propre code !');return;}
+  const friends=DB.friends();
+  if(friends.find(f=>f.code===code)){toast('⚠️ Cet ami est déjà ajouté');return;}
+  friends.push({id:Date.now().toString(),name,code});
+  DB.saveFriends(friends);
+  $id('friend-code-input').value='';
+  $id('friend-name-input').value='';
+  $id('modal-add-friend').classList.remove('open');
+  toast(`✅ ${name} ajouté(e) !`);
+  renderSocial();
+});
+
+// ════════════════════════════════════════════
+// PROFIL
+// ════════════════════════════════════════════
+function renderProfil(){
+  const books=DB.books();
+  const lus=books.filter(b=>b.statut==='Lu');
+  const coups=books.filter(b=>b.coup);
+  const quotes=DB.quotes();
+  const friends=DB.friends();
+  const badges=computeBadges(lus,coups,quotes,friends);
+
+  $id('profil-content').innerHTML=`
+    <div class="profile-banner">
+      <div class="profile-avatar">${DB.userName()[0]?.toUpperCase()||'📚'}</div>
+      <div class="profile-name">${DB.userName()}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">Code : <span style="color:var(--violet3);font-weight:600">${DB.myCode()}</span></div>
+      <div class="profile-stats">
+        <div class="profile-stat"><div class="profile-stat-num">${lus.length}</div><div class="profile-stat-label">Lus</div></div>
+        <div class="profile-stat"><div class="profile-stat-num">${coups.length}</div><div class="profile-stat-label">Coups de cœur</div></div>
+        <div class="profile-stat"><div class="profile-stat-num">${friends.length}</div><div class="profile-stat-label">Amis</div></div>
+      </div>
+    </div>
+
+    <div class="section-title">🏆 Mes badges</div>
+    <div class="badges-grid">${badges.map(b=>`
+      <div class="badge-card ${b.unlocked?'unlocked':'locked'}">
+        <div class="badge-icon">${b.icon}</div>
+        <div class="badge-name">${b.name}</div>
+      </div>`).join('')}</div>
+
+    <div class="section-title" style="justify-content:space-between">
+      📖 Mes citations
+      <button class="btn btn-secondary" style="padding:7px 14px;font-size:12px;margin:0" onclick="$id('modal-quote').classList.add('open')">＋ Ajouter</button>
+    </div>
+    ${quotes.length?quotes.map((q,i)=>`
+      <div class="quote-card">
+        <div class="quote-mark">"</div>
+        <div class="quote-text">${q.text}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="quote-source"><strong>${q.book||'Livre inconnu'}</strong>${q.author?' · '+q.author:''}</div>
+          <button onclick="deleteQuote(${i})" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer">✕</button>
+        </div>
+      </div>`).join(''):`
+    <div class="empty"><div class="empty-icon">📝</div><div class="empty-title">Aucune citation</div><div class="empty-sub">Ajoutez vos phrases préférées ici</div></div>`}
+  `;
+}
+
+function computeBadges(lus,coups,quotes,friends){
+  return[
+    {icon:'📖',name:'Premier livre',unlocked:lus.length>=1},
+    {icon:'📚',name:'5 livres lus',unlocked:lus.length>=5},
+    {icon:'🏆',name:'10 livres lus',unlocked:lus.length>=10},
+    {icon:'💖',name:'Coup de cœur',unlocked:coups.length>=1},
+    {icon:'👥',name:'Premier ami',unlocked:friends.length>=1},
+    {icon:'📝',name:'Lecteur citateur',unlocked:quotes.length>=1},
+    {icon:'⭐',name:'Critique',unlocked:lus.filter(b=>b.note>=4).length>=3},
+    {icon:'🌟',name:'Explorateur',unlocked:[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length>=4},
+    {icon:'🎯',name:'Objectif atteint',unlocked:()=>{const g=DB.goal();return g.target&&lus.length>=g.target}},
+  ].map(b=>({...b,unlocked:typeof b.unlocked==='function'?b.unlocked():b.unlocked}));
+}
+
+function deleteQuote(i){
+  const q=DB.quotes();q.splice(i,1);DB.saveQuotes(q);toast('Citation supprimée');renderProfil();
+}
+
+$id('quote-cancel').addEventListener('click',()=>$id('modal-quote').classList.remove('open'));
+$id('quote-save').addEventListener('click',()=>{
+  const text=$id('q-text').value.trim();
+  if(!text){toast('⚠️ Entrez une citation');return;}
+  const q=DB.quotes();
+  q.unshift({text,book:$id('q-book').value.trim(),author:$id('q-author').value.trim()});
+  DB.saveQuotes(q);
+  $id('q-text').value='';$id('q-book').value='';$id('q-author').value='';
+  $id('modal-quote').classList.remove('open');
+  toast('📝 Citation enregistrée !');
+  renderProfil();
+});
+
+// ════════════════════════════════════════════
+// DETAIL
+// ════════════════════════════════════════════
+function openDetail(id){
+  const book=DB.books().find(b=>b.id===id);
+  if(!book)return;
+  detailBook=book;
+  $id('detail-content').innerHTML=`
+    <div class="detail-cover" style="background:${bookColor(book.titre)}">
+      ${book.cover?`<img src="${book.cover}" onerror="this.style.display='none'">`:'📖'}
+    </div>
+    <div class="detail-title">${book.titre||'Sans titre'}</div>
+    <div class="detail-author">${book.auteur||'Auteur inconnu'}</div>
+    <div style="text-align:center;margin-bottom:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      ${statusBadge(book.statut)}
+      ${book.coup?'<span class="badge badge-coup">💖 Coup de cœur</span>':''}
+      ${book.note?`<span style="color:var(--gold)">${starsHTML(book.note)}</span>`:''}
+    </div>
+    <div class="detail-grid">
+      ${book.genre?`<div class="detail-item"><div class="detail-key">Genre</div><div class="detail-val">${book.genre}</div></div>`:''}
+      ${book.pages?`<div class="detail-item"><div class="detail-key">Pages</div><div class="detail-val">${book.pages}</div></div>`:''}
+      ${book.editeur?`<div class="detail-item"><div class="detail-key">Éditeur</div><div class="detail-val">${book.editeur}</div></div>`:''}
+      ${book.date?`<div class="detail-item"><div class="detail-key">Lu le</div><div class="detail-val">${fmtDate(book.date)}</div></div>`:''}
+    </div>
+    ${book.resume?`<div class="resume-box">${book.resume}</div>`:''}
+    ${book.citation?`<div class="quote-card" style="margin-bottom:0"><div class="quote-mark">"</div><div class="quote-text">${book.citation}</div><div class="quote-source">Citation de ce livre</div></div>`:''}
+  `;
+  const hasFriends=DB.friends().length>0;
+  $id('detail-reco-row').style.display=hasFriends&&book.statut==='Lu'?'flex':'none';
+  $id('modal-detail').classList.add('open');
+}
+
+$id('detail-close').addEventListener('click',()=>$id('modal-detail').classList.remove('open'));
+$id('detail-edit').addEventListener('click',()=>{$id('modal-detail').classList.remove('open');openEdit(detailBook)});
+$id('modal-detail').addEventListener('click',e=>{if(e.target===$id('modal-detail'))$id('modal-detail').classList.remove('open')});
+$id('detail-reco').addEventListener('click',()=>{$id('modal-detail').classList.remove('open');openRecoModal(detailBook)});
+
+// ════════════════════════════════════════════
+// RECO
+// ════════════════════════════════════════════
+function openRecoModal(book){
+  recoBook=book;
+  const friends=DB.friends();
+  $id('reco-book-info').innerHTML=`<div style="display:flex;gap:12px;align-items:center;padding:12px;background:var(--bg3);border-radius:12px">
+    <div style="width:44px;height:64px;border-radius:7px;background:${bookColor(book.titre)};display:flex;align-items:center;justify-content:center;overflow:hidden">${book.cover?`<img src="${book.cover}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`:'📖'}</div>
+    <div><div style="font-family:'Fraunces',serif;color:var(--cream)">${book.titre}</div><div style="font-size:12px;color:var(--text2)">${book.auteur||''}</div></div>
+  </div>`;
+  $id('reco-msg').value='';
+  $id('reco-friends-list').innerHTML=friends.map(f=>`
+    <label style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg3);border-radius:12px;margin-bottom:8px;cursor:pointer">
+      <input type="checkbox" class="reco-friend-check" data-id="${f.id}" data-name="${f.name}" style="width:18px;height:18px;accent-color:var(--violet2)">
+      <div class="friend-avatar" style="width:36px;height:36px;font-size:16px">${f.name[0]?.toUpperCase()}</div>
+      <span style="color:var(--cream)">${f.name}</span>
+    </label>`).join('');
+  $id('modal-reco').classList.add('open');
+}
+
+$id('reco-cancel').addEventListener('click',()=>$id('modal-reco').classList.remove('open'));
+$id('reco-send').addEventListener('click',()=>{
+  const checked=[...$id('reco-friends-list').querySelectorAll('.reco-friend-check:checked')];
+  if(!checked.length){toast('⚠️ Sélectionnez au moins un ami');return;}
+  const msg=$id('reco-msg').value.trim();
+  const recos=DB.recos();
+  checked.forEach(c=>{
+    recos.push({id:Date.now().toString()+Math.random(),to:'me',fromName:DB.userName(),fromId:c.dataset.id,book:recoBook,msg,ts:Date.now(),dismissed:false});
+  });
+  DB.saveRecos(recos);
+  $id('modal-reco').classList.remove('open');
+  toast(`💌 Recommandé à ${checked.length} ami${checked.length>1?'s':''} !`);
+  renderSocial();
+});
+
+// ════════════════════════════════════════════
+// ADD / EDIT
+// ════════════════════════════════════════════
+function resetForm(){
+  note=0;isCoup=false;
+  ['f-titre','f-auteur','f-resume','f-citation','f-pages','f-editeur','f-cover','f-id'].forEach(id=>$id(id).value='');
+  $id('f-genre').value='';$id('f-statut').value='À lire';$id('f-date').value='';
+  $id('search-api').value='';$id('api-results').innerHTML='';
+  $id('reco-msg').value='';
+  updateStars(0);updateCoup(false);
+}
+
+function openAdd(){editId=null;resetForm();$id('modal-title').textContent='Ajouter un livre';$id('btn-delete-row').style.display='none';$id('modal-add').classList.add('open')}
+function openEdit(b){
+  editId=b.id;resetForm();
+  $id('modal-title').textContent='Modifier le livre';
+  $id('f-titre').value=b.titre||'';$id('f-auteur').value=b.auteur||'';
+  $id('f-genre').value=b.genre||'';$id('f-statut').value=b.statut||'À lire';
+  $id('f-resume').value=b.resume||'';$id('f-citation').value=b.citation||'';
+  $id('f-pages').value=b.pages||'';$id('f-date').value=b.date||'';
+  $id('f-editeur').value=b.editeur||'';$id('f-cover').value=b.cover||'';
+  $id('f-id').value=b.id;
+  $id('btn-delete-row').style.display='flex';
+  updateStars(b.note||0);updateCoup(b.coup||false);
+  $id('modal-add').classList.add('open');
+}
+
+function updateStars(n){note=n;document.querySelectorAll('.star-btn').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.v)<=n))}
+function updateCoup(v){
+  isCoup=v;
+  $id('coup-yes').style.background=v?'linear-gradient(135deg,rgba(232,124,138,.4),rgba(232,197,106,.3))':'';
+  $id('coup-no').style.background=!v?'var(--bg3)':'';
+}
+
+document.querySelectorAll('.star-btn').forEach(b=>b.addEventListener('click',()=>updateStars(parseInt(b.dataset.v))));
+$id('coup-yes').addEventListener('click',()=>updateCoup(true));
+$id('coup-no').addEventListener('click',()=>updateCoup(false));
+$id('fab-add').addEventListener('click',openAdd);
+$id('btn-cancel').addEventListener('click',()=>$id('modal-add').classList.remove('open'));
+$id('modal-add').addEventListener('click',e=>{if(e.target===$id('modal-add'))$id('modal-add').classList.remove('open')});
+
+$id('btn-save').addEventListener('click',()=>{
+  const titre=$id('f-titre').value.trim();
+  if(!titre){toast('⚠️ Le titre est obligatoire');return;}
+  const book={titre,auteur:$id('f-auteur').value.trim(),genre:$id('f-genre').value,statut:$id('f-statut').value,note:note||null,coup:isCoup,resume:$id('f-resume').value.trim(),citation:$id('f-citation').value.trim(),pages:$id('f-pages').value,date:$id('f-date').value,editeur:$id('f-editeur').value.trim(),cover:$id('f-cover').value};
+  const books=DB.books();
+  if(editId){book.id=editId;const i=books.findIndex(b=>b.id===editId);if(i>=0)books[i]=book;DB.saveBooks(books);toast('✅ Livre mis à jour !')}
+  else{book.id=Date.now().toString();books.unshift(book);DB.saveBooks(books);toast('✅ Livre ajouté !')}
+  // Auto-save citation
+  if(book.citation&&book.statut==='Lu'){
+    const quotes=DB.quotes();quotes.unshift({text:book.citation,book:book.titre,author:book.auteur});
+    DB.saveQuotes(quotes);
+  }
+  $id('modal-add').classList.remove('open');renderBooks();
+});
+
+$id('btn-delete').addEventListener('click',()=>{
+  if(editId&&confirm('Supprimer ce livre ?')){
+    DB.saveBooks(DB.books().filter(b=>b.id!==editId));
+    $id('modal-add').classList.remove('open');toast('🗑️ Livre supprimé');renderBooks();
+  }
+});
+
+// ════════════════════════════════════════════
+// OPEN LIBRARY API
+// ════════════════════════════════════════════
+$id('search-api-btn').addEventListener('click',searchBooks);
+$id('search-api').addEventListener('keydown',e=>{if(e.key==='Enter')searchBooks()});
+
+async function searchBooks(){
+  const q=$id('search-api').value.trim();if(!q)return;
+  const el=$id('api-results');
+  el.innerHTML='<div class="loading"><div class="spinner"></div>Recherche en cours…</div>';
+  try{
+    const res=await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=5&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i&lang=fre`);
+    const data=await res.json();
+    if(!data.docs?.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun résultat trouvé</div>';return;}
+    el.innerHTML=data.docs.map(b=>{
+      const cover=b.cover_i?`https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`:'';
+      const safe=JSON.stringify({titre:b.title||'',auteur:(b.author_name||[])[0]||'',pages:b.number_of_pages_median||'',editeur:(b.publisher||[])[0]||'',cover}).replace(/'/g,"&#39;");
+      return`<div class="search-result" onclick="fillFromSearch(${safe})">
+        <div class="search-result-cover">${cover?`<img src="${cover}" onerror="this.innerHTML='📖'">`:'📖'}</div>
+        <div class="search-result-info">
+          <div class="search-result-title">${b.title||'—'}</div>
+          <div class="search-result-author">${(b.author_name||[])[0]||'Auteur inconnu'}</div>
+          <div style="font-size:11px;color:var(--text3)">${b.first_publish_year||''}</div>
+        </div>
+        <button class="choose-btn">Choisir</button>
+      </div>`;
+    }).join('');
+  }catch{el.innerHTML='<div style="color:var(--rose);font-size:13px;padding:8px 0">Erreur de connexion</div>'}
+}
+
+function fillFromSearch(book){
+  $id('f-titre').value=book.titre||'';
+  $id('f-auteur').value=book.auteur||'';
+  $id('f-pages').value=book.pages||'';
+  $id('f-editeur').value=book.editeur||'';
+  $id('f-cover').value=book.cover||'';
+  $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations récupérées !</div>';
+  $id('search-api').value='';
+}
+
+// ════════════════════════════════════════════
+// SERVICE WORKER
+// ════════════════════════════════════════════
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+
+// ════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════
+setTimeout(()=>{$id('splash').classList.remove('active');showScreen('lectures')},1900);
+</script>
+</body>
+</html>

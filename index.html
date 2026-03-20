@@ -312,81 +312,84 @@
 </head>
 <body>
 
-<!-- Firebase SDK -->
-<script type="module">
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-  import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+<!-- Supabase SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ══════════════════════════════════════════════════
+// ⚠️  REMPLACEZ CES 2 VALEURS PAR LES VÔTRES
+//     (Settings → API dans votre projet Supabase)
+// ══════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://umvgeyjikkgwjylqsojr.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_i8ruQsbwr8x0c4zRZam4yw_Kt8tIfsS';
 
-  // ── REMPLACEZ CES VALEURS PAR VOTRE CONFIG FIREBASE (voir guide) ──
-  const firebaseConfig = {
-    apiKey: window.FIREBASE_API_KEY || "VOTRE_API_KEY",
-    authDomain: window.FIREBASE_AUTH_DOMAIN || "VOTRE_PROJECT.firebaseapp.com",
-    projectId: window.FIREBASE_PROJECT_ID || "VOTRE_PROJECT_ID",
-    storageBucket: window.FIREBASE_STORAGE_BUCKET || "VOTRE_PROJECT.appspot.com",
-    messagingSenderId: window.FIREBASE_MESSAGING_SENDER_ID || "VOTRE_SENDER_ID",
-    appId: window.FIREBASE_APP_ID || "VOTRE_APP_ID"
-  };
+const _supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
+// ── Vérification pseudo unique ──
+window._checkPseudo = async (pseudo) => {
+  try {
+    const { data } = await _supa.from('profiles').select('id').eq('pseudo', pseudo).maybeSingle();
+    return !data; // true = disponible
+  } catch(e) { return true; }
+};
 
-  // Expose globally
-  window._auth = auth;
-  window._db = db;
-  window._firebase = { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile, doc, setDoc, getDoc, collection, query, where, getDocs };
+// ── Inscription ──
+window._signUp = async (emailOrPhone, password, pseudo) => {
+  const email = emailOrPhone.includes('@') ? emailOrPhone : emailOrPhone.replace(/\s/g,'') + '@livroo.app';
+  const { data, error } = await _supa.auth.signUp({ email, password });
+  if (error) throw error;
+  const code = Math.random().toString(36).substring(2,8).toUpperCase();
+  await _supa.from('profiles').insert({ id: data.user.id, pseudo, contact: emailOrPhone, code, created_at: new Date().toISOString() });
+  localStorage.setItem('lv_username', pseudo);
+  localStorage.setItem('lv_mycode', code);
+};
 
-  // Auth state listener
-  onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      // Load user profile from Firestore
-      try {
-        const snap = await getDoc(doc(db, 'users', user.uid));
-        if (snap.exists()) {
-          const data = snap.data();
-          window._userProfile = data;
-          localStorage.setItem('lv_username', data.pseudo || user.displayName || 'Lecteur');
-          localStorage.setItem('lv_mycode', data.code || DB.myCode());
-        }
-      } catch(e) { console.warn('Profile load error', e); }
+// ── Connexion ──
+window._signIn = async (emailOrPhone, password) => {
+  const email = emailOrPhone.includes('@') ? emailOrPhone : emailOrPhone.replace(/\s/g,'') + '@livroo.app';
+  const { error } = await _supa.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  // Charger le profil
+  const { data: { user } } = await _supa.auth.getUser();
+  if (user) {
+    const { data: profile } = await _supa.from('profiles').select('*').eq('id', user.id).maybeSingle();
+    if (profile) {
+      localStorage.setItem('lv_username', profile.pseudo || 'Lecteur');
+      localStorage.setItem('lv_mycode', profile.code || DB.myCode());
+    }
+  }
+};
+
+// ── Déconnexion ──
+window._signOut = async () => {
+  await _supa.auth.signOut();
+};
+
+// ── Vérif session au chargement ──
+window.addEventListener('DOMContentLoaded', async () => {
+  setTimeout(async () => {
+    // Mode invité : pas de vérification session
+    if (localStorage.getItem('lv_guest') === '1') {
       document.getElementById('screen-auth').classList.remove('active');
       showScreen('lectures');
-    } else {
-      // Not logged in — show auth
-      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-      document.getElementById('screen-auth').classList.add('active');
+      return;
     }
-  });
-
-  window._signUp = async (emailOrPhone, password, pseudo) => {
-    const { createUserWithEmailAndPassword, updateProfile, doc, setDoc } = window._firebase;
-    const auth = window._auth; const db = window._db;
-    const email = emailOrPhone.includes('@') ? emailOrPhone : emailOrPhone + '@livroo.phone';
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(cred.user, { displayName: pseudo });
-    const code = Math.random().toString(36).substring(2,8).toUpperCase();
-    await setDoc(doc(db, 'users', cred.user.uid), { pseudo, email: emailOrPhone, code, uid: cred.user.uid, createdAt: Date.now() });
-    localStorage.setItem('lv_mycode', code);
-    localStorage.setItem('lv_username', pseudo);
-  };
-
-  window._signIn = async (emailOrPhone, password) => {
-    const { signInWithEmailAndPassword } = window._firebase;
-    const email = emailOrPhone.includes('@') ? emailOrPhone : emailOrPhone + '@livroo.phone';
-    await signInWithEmailAndPassword(window._auth, email, password);
-  };
-
-  window._signOut = async () => {
-    await window._firebase.signOut(window._auth);
-  };
-
-  window._checkPseudo = async (pseudo) => {
-    const { collection, query, where, getDocs } = window._firebase;
-    const q = query(collection(window._db, 'users'), where('pseudo', '==', pseudo));
-    const snap = await getDocs(q);
-    return snap.empty; // true = available
-  };
+    try {
+      const { data: { session } } = await _supa.auth.getSession();
+      if (session) {
+        const { data: profile } = await _supa.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+        if (profile) {
+          localStorage.setItem('lv_username', profile.pseudo || 'Lecteur');
+          localStorage.setItem('lv_mycode', profile.code || DB.myCode());
+        }
+        document.getElementById('screen-auth').classList.remove('active');
+        showScreen('lectures');
+      }
+      // sinon l'écran auth reste visible
+    } catch(e) {
+      console.warn('Session check error', e);
+    }
+  }, 200);
+});
 </script>
 
 <!-- ═══ AUTH SCREEN ═══ -->
@@ -468,8 +471,21 @@
           </div>
         </div>
 
-        <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="doSignIn()">🚀 Se connecter</button>
+        <!-- Rester connecté -->
+        <label style="display:flex;align-items:center;gap:10px;margin:12px 0 4px;cursor:pointer">
+          <input type="checkbox" id="remember-me" checked style="width:18px;height:18px;accent-color:var(--violet2);cursor:pointer">
+          <span style="font-size:13px;color:var(--text2)">Rester connecté(e)</span>
+        </label>
+
+        <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="doSignIn()">🚀 Se connecter</button>
       </div>
+    </div>
+
+    <!-- Invité -->
+    <div style="text-align:center;margin-top:4px">
+      <button onclick="enterAsGuest()" style="background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:10px;text-decoration:underline;text-underline-offset:3px">
+        Continuer en tant qu'invité (sans sauvegarde)
+      </button>
     </div>
 
     <div class="auth-footer">En continuant, vous acceptez les <a href="#">conditions d'utilisation</a></div>
@@ -1274,31 +1290,40 @@ $id('btn-delete').addEventListener('click',()=>{
 $id('search-api-btn').addEventListener('click',searchBooks);
 $id('search-api').addEventListener('keydown',e=>{if(e.key==='Enter')searchBooks()});
 
+let _searchResults = [];
+
 async function searchBooks(){
   const q=$id('search-api').value.trim();if(!q)return;
   const el=$id('api-results');
   el.innerHTML='<div class="loading"><div class="spinner"></div>Recherche en cours…</div>';
   try{
-    const res=await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=5&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i&lang=fre`);
+    const res=await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=6&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i`);
     const data=await res.json();
     if(!data.docs?.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun résultat trouvé</div>';return;}
-    el.innerHTML=data.docs.map(b=>{
-      const cover=b.cover_i?`https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`:'';
-      const safe=JSON.stringify({titre:b.title||'',auteur:(b.author_name||[])[0]||'',pages:b.number_of_pages_median||'',editeur:(b.publisher||[])[0]||'',cover}).replace(/'/g,"&#39;");
-      return`<div class="search-result" onclick="fillFromSearch(${safe})">
-        <div class="search-result-cover">${cover?`<img src="${cover}" onerror="this.innerHTML='📖'">`:'📖'}</div>
+    _searchResults = data.docs.map(b=>({
+      titre: b.title||'',
+      auteur: (b.author_name||[])[0]||'',
+      pages: b.number_of_pages_median||'',
+      editeur: (b.publisher||[])[0]||'',
+      cover: b.cover_i?`https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`:'',
+      year: b.first_publish_year||''
+    }));
+    el.innerHTML = _searchResults.map((b,i)=>`
+      <div class="search-result" onclick="fillFromSearch(${i})" style="cursor:pointer">
+        <div class="search-result-cover">${b.cover?`<img src="${b.cover}" onerror="this.parentNode.innerHTML='📖'">`:'📖'}</div>
         <div class="search-result-info">
-          <div class="search-result-title">${b.title||'—'}</div>
-          <div class="search-result-author">${(b.author_name||[])[0]||'Auteur inconnu'}</div>
-          <div style="font-size:11px;color:var(--text3)">${b.first_publish_year||''}</div>
+          <div class="search-result-title">${b.titre||'—'}</div>
+          <div class="search-result-author">${b.auteur||'Auteur inconnu'}</div>
+          <div style="font-size:11px;color:var(--text3)">${b.year}</div>
         </div>
-        <button class="choose-btn">Choisir</button>
-      </div>`;
-    }).join('');
-  }catch{el.innerHTML='<div style="color:var(--rose);font-size:13px;padding:8px 0">Erreur de connexion</div>'}
+        <button class="choose-btn" onclick="event.stopPropagation();fillFromSearch(${i})">Choisir</button>
+      </div>`).join('');
+  }catch(e){el.innerHTML='<div style="color:var(--rose);font-size:13px;padding:8px 0">Erreur de connexion</div>'}
 }
 
-function fillFromSearch(book){
+function fillFromSearch(index){
+  const book = _searchResults[index];
+  if(!book) return;
   $id('f-titre').value=book.titre||'';
   $id('f-auteur').value=book.auteur||'';
   $id('f-pages').value=book.pages||'';
@@ -1306,6 +1331,8 @@ function fillFromSearch(book){
   $id('f-cover').value=book.cover||'';
   $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations récupérées !</div>';
   $id('search-api').value='';
+  // Scroll to title field
+  setTimeout(()=>$id('f-titre').scrollIntoView({behavior:'smooth',block:'center'}), 100);
 }
 
 // ════════════════════════════════════════════
@@ -1418,52 +1445,72 @@ async function doSignUp() {
   btn.textContent = '⏳ Création…'; btn.disabled = true;
 
   try {
-    if (window._signUp) {
-      await window._signUp(contact, password, pseudo);
-    } else {
-      // Firebase not configured yet — local mode
-      localStorage.setItem('lv_username', pseudo);
-      localStorage.setItem('lv_auth', JSON.stringify({pseudo, contact}));
-      $id('screen-auth').classList.remove('active');
-      showScreen('lectures');
-    }
+    await window._signUp(contact, password, pseudo);
     toast('✨ Bienvenue, ' + pseudo + ' !');
+    $id('screen-auth').classList.remove('active');
+    showScreen('lectures');
   } catch(e) {
-    const msgs = {
-      'auth/email-already-in-use': '⚠️ Cet e-mail est déjà utilisé',
-      'auth/invalid-email': '⚠️ Format d\'e-mail invalide',
-      'auth/weak-password': '⚠️ Mot de passe trop faible (6 caractères min)',
-    };
-    showAuthError(msgs[e.code] || '⚠️ Erreur : ' + (e.message || e));
+    const msg = (e.message || '').toLowerCase();
+    let err = '⚠️ Erreur lors de la création du compte';
+    if (msg.includes('already') || msg.includes('existe')) err = '⚠️ Cet e-mail est déjà utilisé';
+    else if (msg.includes('invalid') && msg.includes('email')) err = '⚠️ Format d\'e-mail invalide';
+    else if (msg.includes('password') || msg.includes('mot de passe')) err = '⚠️ Mot de passe trop court (6 caractères min)';
+    else if (msg.includes('network') || msg.includes('fetch')) err = '⚠️ Problème de connexion internet';
+    showAuthError(err);
   } finally { btn.textContent = '✨ Créer mon compte'; btn.disabled = false; }
 }
 
 async function doSignIn() {
   const contact = $id('signin-contact').value.trim();
   const password = $id('signin-password').value;
+  const rememberMe = $id('remember-me')?.checked ?? true;
   $id('auth-error').style.display = 'none';
   if (!contact || !password) { showAuthError('⚠️ Remplissez tous les champs'); return; }
 
   try {
-    if (window._signIn) {
-      await window._signIn(contact, password);
-    } else {
-      // Local mode fallback
-      const saved = JSON.parse(localStorage.getItem('lv_auth') || '{}');
-      if (saved.contact === contact) {
-        $id('screen-auth').classList.remove('active');
-        showScreen('lectures');
-      } else { showAuthError('⚠️ Identifiants incorrects'); }
-    }
+    // Supabase gère la persistance de session nativement
+    // On stocke la préférence pour l'affichage
+    if (rememberMe) localStorage.setItem('lv_remember', '1');
+    else localStorage.removeItem('lv_remember');
+    localStorage.removeItem('lv_guest');
+    await window._signIn(contact, password);
+    $id('screen-auth').classList.remove('active');
+    showScreen('lectures');
+    toast('👋 Bon retour sur Livroo !');
   } catch(e) {
-    const msgs = {
-      'auth/user-not-found': '⚠️ Aucun compte trouvé avec cet identifiant',
-      'auth/wrong-password': '⚠️ Mot de passe incorrect',
-      'auth/invalid-credential': '⚠️ Identifiants incorrects',
-      'auth/too-many-requests': '⚠️ Trop de tentatives, réessayez plus tard',
-    };
-    showAuthError(msgs[e.code] || '⚠️ Erreur de connexion');
+    const msg = (e.message || '').toLowerCase();
+    let err = '⚠️ Identifiants incorrects';
+    if (msg.includes('invalid') || msg.includes('not found') || msg.includes('credentials')) err = '⚠️ E-mail ou mot de passe incorrect';
+    else if (msg.includes('too many') || msg.includes('rate')) err = '⚠️ Trop de tentatives, réessayez dans quelques minutes';
+    else if (msg.includes('network') || msg.includes('fetch')) err = '⚠️ Problème de connexion internet';
+    showAuthError(err);
   }
+}
+
+// ════════════════════════════════════════════
+// MODE INVITÉ
+// ════════════════════════════════════════════
+function enterAsGuest() {
+  localStorage.setItem('lv_guest', '1');
+  localStorage.setItem('lv_username', 'Invité');
+  $id('screen-auth').classList.remove('active');
+  showScreen('lectures');
+  toast('👋 Mode invité — vos données ne seront pas sauvegardées');
+}
+
+// ════════════════════════════════════════════
+// DÉCONNEXION
+// ════════════════════════════════════════════
+async function doLogout() {
+  if (!confirm('Se déconnecter de Livroo ?')) return;
+  try {
+    localStorage.removeItem('lv_guest');
+    localStorage.removeItem('lv_remember');
+    if (window._signOut) await window._signOut();
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    $id('screen-auth').classList.add('active');
+    switchAuthTab('signup');
+  } catch(e) { toast('Erreur de déconnexion'); }
 }
 
 // ════════════════════════════════════════════
@@ -1471,27 +1518,6 @@ async function doSignIn() {
 // ════════════════════════════════════════════
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 
-// ════════════════════════════════════════════
-// INIT
-// ════════════════════════════════════════════
-// If Firebase not configured, check local auth
-window.addEventListener('DOMContentLoaded', () => {
-  const localAuth = localStorage.getItem('lv_auth');
-  // Firebase will handle auth state; fallback for local mode handled in doSignUp/doSignIn
-  // If Firebase SDK fails to load, fall back gracefully
-  setTimeout(() => {
-    if (!window._auth) {
-      // Firebase not loaded — check local storage
-      const localAuth = localStorage.getItem('lv_auth');
-      $id('splash').classList.remove('active');
-      if (localAuth) {
-        $id('screen-auth').classList.remove('active');
-        showScreen('lectures');
-      }
-      // else auth screen stays visible
-    }
-  }, 3000);
-});
 </script>
 </body>
 </html>

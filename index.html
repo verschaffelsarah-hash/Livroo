@@ -277,12 +277,207 @@
     .code-input{width:100%;background:var(--bg3);border:2px solid var(--border);border-radius:14px;padding:16px 14px;color:var(--violet2);font-family:'Fraunces',serif;font-size:24px;outline:none;transition:border-color .2s;text-align:center;letter-spacing:6px;font-weight:700;-webkit-appearance:none}
     .code-input:focus{border-color:var(--violet2)}
     .code-input::placeholder{color:var(--text3);letter-spacing:2px;font-size:18px}
+
+    /* ── AUTH SCREEN ── */
+    #screen-auth{background:radial-gradient(ellipse at 50% 30%,#1e1040 0%,#0d0d1a 75%);justify-content:flex-start;overflow-y:auto}
+    .auth-wrap{padding:60px 24px 40px;min-height:100%;display:flex;flex-direction:column}
+    .auth-logo{text-align:center;margin-bottom:32px}
+    .auth-logo-icon{font-size:56px;animation:float 3s ease-in-out infinite;display:block;margin-bottom:10px}
+    .auth-logo-text{font-family:'Fraunces',serif;font-size:42px;font-weight:700;background:linear-gradient(135deg,var(--violet2),var(--rose),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .auth-logo-sub{font-size:12px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-top:4px}
+    .auth-tabs{display:flex;gap:4px;background:var(--bg3);border-radius:14px;padding:4px;margin-bottom:24px}
+    .auth-tab{flex:1;padding:10px;border-radius:10px;border:none;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;background:none;color:var(--text3)}
+    .auth-tab.active{background:var(--violet);color:#fff}
+    .auth-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:22px;margin-bottom:16px}
+    .auth-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--text3);font-size:11px}
+    .auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+    .input-icon-wrap{position:relative}
+    .input-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none}
+    .input-icon-wrap .form-input{padding-left:40px}
+    .pseudo-status{font-size:12px;margin-top:5px;min-height:18px;transition:color .2s}
+    .pseudo-ok{color:var(--teal)}
+    .pseudo-taken{color:var(--rose)}
+    .pseudo-checking{color:var(--text3)}
+    .pseudo-suggestions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+    .pseudo-chip{padding:5px 12px;border-radius:20px;background:rgba(124,92,191,.15);color:var(--violet3);border:1px solid rgba(124,92,191,.25);font-size:12px;cursor:pointer;transition:all .2s}
+    .pseudo-chip:active{background:rgba(124,92,191,.35)}
+    .auth-error{background:rgba(232,124,138,.1);border:1px solid rgba(232,124,138,.25);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--rose);margin-bottom:12px;display:none}
+    .auth-footer{text-align:center;font-size:12px;color:var(--text3);margin-top:16px}
+    .auth-footer a{color:var(--violet3);text-decoration:none}
+    .method-toggle{display:flex;gap:8px;margin-bottom:14px}
+    .method-btn{flex:1;padding:10px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+    .method-btn.active{border-color:var(--violet2);color:var(--violet2);background:rgba(124,92,191,.1)}
+    .firebase-note{font-size:11px;color:var(--text3);text-align:center;margin-top:8px;line-height:1.5}
   </style>
 </head>
 <body>
 
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  // ── REMPLACEZ CES VALEURS PAR VOTRE CONFIG FIREBASE (voir guide) ──
+  const firebaseConfig = {
+    apiKey: window.FIREBASE_API_KEY || "VOTRE_API_KEY",
+    authDomain: window.FIREBASE_AUTH_DOMAIN || "VOTRE_PROJECT.firebaseapp.com",
+    projectId: window.FIREBASE_PROJECT_ID || "VOTRE_PROJECT_ID",
+    storageBucket: window.FIREBASE_STORAGE_BUCKET || "VOTRE_PROJECT.appspot.com",
+    messagingSenderId: window.FIREBASE_MESSAGING_SENDER_ID || "VOTRE_SENDER_ID",
+    appId: window.FIREBASE_APP_ID || "VOTRE_APP_ID"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // Expose globally
+  window._auth = auth;
+  window._db = db;
+  window._firebase = { createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile, doc, setDoc, getDoc, collection, query, where, getDocs };
+
+  // Auth state listener
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // Load user profile from Firestore
+      try {
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (snap.exists()) {
+          const data = snap.data();
+          window._userProfile = data;
+          localStorage.setItem('lv_username', data.pseudo || user.displayName || 'Lecteur');
+          localStorage.setItem('lv_mycode', data.code || DB.myCode());
+        }
+      } catch(e) { console.warn('Profile load error', e); }
+      document.getElementById('screen-auth').classList.remove('active');
+      showScreen('lectures');
+    } else {
+      // Not logged in — show auth
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      document.getElementById('screen-auth').classList.add('active');
+    }
+  });
+
+  window._signUp = async (emailOrPhone, password, pseudo) => {
+    const { createUserWithEmailAndPassword, updateProfile, doc, setDoc } = window._firebase;
+    const auth = window._auth; const db = window._db;
+    const email = emailOrPhone.includes('@') ? emailOrPhone : emailOrPhone + '@livroo.phone';
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(cred.user, { displayName: pseudo });
+    const code = Math.random().toString(36).substring(2,8).toUpperCase();
+    await setDoc(doc(db, 'users', cred.user.uid), { pseudo, email: emailOrPhone, code, uid: cred.user.uid, createdAt: Date.now() });
+    localStorage.setItem('lv_mycode', code);
+    localStorage.setItem('lv_username', pseudo);
+  };
+
+  window._signIn = async (emailOrPhone, password) => {
+    const { signInWithEmailAndPassword } = window._firebase;
+    const email = emailOrPhone.includes('@') ? emailOrPhone : emailOrPhone + '@livroo.phone';
+    await signInWithEmailAndPassword(window._auth, email, password);
+  };
+
+  window._signOut = async () => {
+    await window._firebase.signOut(window._auth);
+  };
+
+  window._checkPseudo = async (pseudo) => {
+    const { collection, query, where, getDocs } = window._firebase;
+    const q = query(collection(window._db, 'users'), where('pseudo', '==', pseudo));
+    const snap = await getDocs(q);
+    return snap.empty; // true = available
+  };
+</script>
+
+<!-- ═══ AUTH SCREEN ═══ -->
+<div id="screen-auth" class="screen active">
+  <div class="auth-wrap">
+    <div class="auth-logo">
+      <span class="auth-logo-icon">📚</span>
+      <div class="auth-logo-text">Livroo</div>
+      <div class="auth-logo-sub">Votre vie en livres</div>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-signup" onclick="switchAuthTab('signup')">Créer un compte</button>
+      <button class="auth-tab" id="tab-signin" onclick="switchAuthTab('signin')">Se connecter</button>
+    </div>
+
+    <div id="auth-error" class="auth-error"></div>
+
+    <!-- INSCRIPTION -->
+    <div id="form-signup">
+      <div class="auth-card">
+        <div class="method-toggle">
+          <button class="method-btn active" id="method-email" onclick="switchMethod('email')">📧 E-mail</button>
+          <button class="method-btn" id="method-phone" onclick="switchMethod('phone')">📱 Téléphone</button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" id="contact-label-up">Adresse e-mail</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon" id="contact-icon-up">📧</span>
+            <input class="form-input" id="signup-contact" type="email" placeholder="votre@email.com" autocomplete="email">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Pseudo unique</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">✨</span>
+            <input class="form-input" id="signup-pseudo" placeholder="Ex : LectriceAvide" autocomplete="username" oninput="onPseudoInput(this.value)">
+          </div>
+          <div class="pseudo-status" id="pseudo-status"></div>
+          <div class="pseudo-suggestions" id="pseudo-suggestions"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Mot de passe</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">🔒</span>
+            <input class="form-input" id="signup-password" type="password" placeholder="6 caractères minimum" autocomplete="new-password">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;margin-top:6px" id="signup-btn" onclick="doSignUp()">✨ Créer mon compte</button>
+        <div class="firebase-note">Vos données sont sécurisées · Aucune publicité</div>
+      </div>
+    </div>
+
+    <!-- CONNEXION -->
+    <div id="form-signin" style="display:none">
+      <div class="auth-card">
+        <div class="method-toggle">
+          <button class="method-btn active" id="method-email-in" onclick="switchMethodIn('email')">📧 E-mail</button>
+          <button class="method-btn" id="method-phone-in" onclick="switchMethodIn('phone')">📱 Téléphone</button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" id="contact-label-in">Adresse e-mail</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon" id="contact-icon-in">📧</span>
+            <input class="form-input" id="signin-contact" type="email" placeholder="votre@email.com" autocomplete="email">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Mot de passe</label>
+          <div class="input-icon-wrap">
+            <span class="input-icon">🔒</span>
+            <input class="form-input" id="signin-password" type="password" placeholder="Votre mot de passe" autocomplete="current-password">
+          </div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="doSignIn()">🚀 Se connecter</button>
+      </div>
+    </div>
+
+    <div class="auth-footer">En continuant, vous acceptez les <a href="#">conditions d'utilisation</a></div>
+  </div>
+</div>
+
 <!-- SPLASH -->
-<div id="splash" class="screen active">
+<div id="splash" class="screen">
   <div class="splash-icon">📚</div>
   <div class="splash-logo">Livroo</div>
   <div class="splash-tagline">Votre vie en livres</div>
@@ -903,6 +1098,7 @@ function renderProfil(){
         </div>
       </div>`).join(''):`
     <div class="empty"><div class="empty-icon">📝</div><div class="empty-title">Aucune citation</div><div class="empty-sub">Ajoutez vos phrases préférées ici</div></div>`}
+    <button class="btn btn-danger" style="width:100%;margin-top:20px" onclick="doLogout()">🚪 Se déconnecter</button>
   `;
 }
 
@@ -1113,6 +1309,164 @@ function fillFromSearch(book){
 }
 
 // ════════════════════════════════════════════
+// AUTH UI LOGIC
+// ════════════════════════════════════════════
+let authMethod = 'email';
+let authMethodIn = 'email';
+let pseudoOk = false;
+let pseudoTimer = null;
+
+function switchAuthTab(tab) {
+  $id('tab-signup').classList.toggle('active', tab==='signup');
+  $id('tab-signin').classList.toggle('active', tab==='signin');
+  $id('form-signup').style.display = tab==='signup' ? '' : 'none';
+  $id('form-signin').style.display = tab==='signin' ? '' : 'none';
+  $id('auth-error').style.display = 'none';
+}
+
+function switchMethod(m) {
+  authMethod = m;
+  $id('method-email').classList.toggle('active', m==='email');
+  $id('method-phone').classList.toggle('active', m==='phone');
+  const isEmail = m === 'email';
+  $id('contact-label-up').textContent = isEmail ? 'Adresse e-mail' : 'Numéro de téléphone';
+  $id('contact-icon-up').textContent = isEmail ? '📧' : '📱';
+  $id('signup-contact').type = isEmail ? 'email' : 'tel';
+  $id('signup-contact').placeholder = isEmail ? 'votre@email.com' : '+33 6 00 00 00 00';
+}
+
+function switchMethodIn(m) {
+  authMethodIn = m;
+  $id('method-email-in').classList.toggle('active', m==='email');
+  $id('method-phone-in').classList.toggle('active', m==='phone');
+  const isEmail = m === 'email';
+  $id('contact-label-in').textContent = isEmail ? 'Adresse e-mail' : 'Numéro de téléphone';
+  $id('contact-icon-in').textContent = isEmail ? '📧' : '📱';
+  $id('signin-contact').type = isEmail ? 'email' : 'tel';
+  $id('signin-contact').placeholder = isEmail ? 'votre@email.com' : '+33 6 00 00 00 00';
+}
+
+function showAuthError(msg) {
+  const el = $id('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// Pseudo availability check with debounce
+async function onPseudoInput(val) {
+  const status = $id('pseudo-status');
+  const sugg = $id('pseudo-suggestions');
+  pseudoOk = false;
+  clearTimeout(pseudoTimer);
+  if (!val || val.length < 3) {
+    status.textContent = val ? '⚠️ Minimum 3 caractères' : '';
+    status.className = 'pseudo-status pseudo-checking';
+    sugg.innerHTML = '';
+    return;
+  }
+  if (!/^[a-zA-Z0-9_\-\.À-ÿ]+$/.test(val)) {
+    status.textContent = '⚠️ Lettres, chiffres et _ - . uniquement';
+    status.className = 'pseudo-status pseudo-taken';
+    sugg.innerHTML = '';
+    return;
+  }
+  status.textContent = '⏳ Vérification…';
+  status.className = 'pseudo-status pseudo-checking';
+  pseudoTimer = setTimeout(async () => {
+    try {
+      if (!window._checkPseudo) { pseudoOk = true; status.textContent = '✅ Disponible'; status.className = 'pseudo-status pseudo-ok'; return; }
+      const available = await window._checkPseudo(val);
+      if (available) {
+        pseudoOk = true;
+        status.textContent = '✅ Pseudo disponible !';
+        status.className = 'pseudo-status pseudo-ok';
+        sugg.innerHTML = '';
+      } else {
+        pseudoOk = false;
+        status.textContent = '❌ Ce pseudo est déjà pris';
+        status.className = 'pseudo-status pseudo-taken';
+        // Generate suggestions
+        const suggestions = [val + Math.floor(Math.random()*99+1), val + '_', val + new Date().getFullYear(), 'Le' + val, val + 'Lit'];
+        sugg.innerHTML = '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;width:100%">Suggestions :</div>' +
+          suggestions.map(s => `<span class="pseudo-chip" onclick="useSuggestion('${s}')">${s}</span>`).join('');
+      }
+    } catch(e) {
+      pseudoOk = true; // Fallback: allow if Firebase not configured yet
+      status.textContent = '✅ Disponible';
+      status.className = 'pseudo-status pseudo-ok';
+    }
+  }, 600);
+}
+
+function useSuggestion(s) {
+  $id('signup-pseudo').value = s;
+  onPseudoInput(s);
+}
+
+async function doSignUp() {
+  const contact = $id('signup-contact').value.trim();
+  const pseudo = $id('signup-pseudo').value.trim();
+  const password = $id('signup-password').value;
+  $id('auth-error').style.display = 'none';
+
+  if (!contact) { showAuthError('⚠️ Entrez votre ' + (authMethod==='email'?'e-mail':'numéro')); return; }
+  if (!pseudo || pseudo.length < 3) { showAuthError('⚠️ Le pseudo doit faire au moins 3 caractères'); return; }
+  if (!pseudoOk) { showAuthError('⚠️ Choisissez un pseudo disponible'); return; }
+  if (password.length < 6) { showAuthError('⚠️ Le mot de passe doit faire au moins 6 caractères'); return; }
+
+  const btn = $id('signup-btn');
+  btn.textContent = '⏳ Création…'; btn.disabled = true;
+
+  try {
+    if (window._signUp) {
+      await window._signUp(contact, password, pseudo);
+    } else {
+      // Firebase not configured yet — local mode
+      localStorage.setItem('lv_username', pseudo);
+      localStorage.setItem('lv_auth', JSON.stringify({pseudo, contact}));
+      $id('screen-auth').classList.remove('active');
+      showScreen('lectures');
+    }
+    toast('✨ Bienvenue, ' + pseudo + ' !');
+  } catch(e) {
+    const msgs = {
+      'auth/email-already-in-use': '⚠️ Cet e-mail est déjà utilisé',
+      'auth/invalid-email': '⚠️ Format d\'e-mail invalide',
+      'auth/weak-password': '⚠️ Mot de passe trop faible (6 caractères min)',
+    };
+    showAuthError(msgs[e.code] || '⚠️ Erreur : ' + (e.message || e));
+  } finally { btn.textContent = '✨ Créer mon compte'; btn.disabled = false; }
+}
+
+async function doSignIn() {
+  const contact = $id('signin-contact').value.trim();
+  const password = $id('signin-password').value;
+  $id('auth-error').style.display = 'none';
+  if (!contact || !password) { showAuthError('⚠️ Remplissez tous les champs'); return; }
+
+  try {
+    if (window._signIn) {
+      await window._signIn(contact, password);
+    } else {
+      // Local mode fallback
+      const saved = JSON.parse(localStorage.getItem('lv_auth') || '{}');
+      if (saved.contact === contact) {
+        $id('screen-auth').classList.remove('active');
+        showScreen('lectures');
+      } else { showAuthError('⚠️ Identifiants incorrects'); }
+    }
+  } catch(e) {
+    const msgs = {
+      'auth/user-not-found': '⚠️ Aucun compte trouvé avec cet identifiant',
+      'auth/wrong-password': '⚠️ Mot de passe incorrect',
+      'auth/invalid-credential': '⚠️ Identifiants incorrects',
+      'auth/too-many-requests': '⚠️ Trop de tentatives, réessayez plus tard',
+    };
+    showAuthError(msgs[e.code] || '⚠️ Erreur de connexion');
+  }
+}
+
+// ════════════════════════════════════════════
 // SERVICE WORKER
 // ════════════════════════════════════════════
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -1120,7 +1474,24 @@ if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch((
 // ════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════
-setTimeout(()=>{$id('splash').classList.remove('active');showScreen('lectures')},1900);
+// If Firebase not configured, check local auth
+window.addEventListener('DOMContentLoaded', () => {
+  const localAuth = localStorage.getItem('lv_auth');
+  // Firebase will handle auth state; fallback for local mode handled in doSignUp/doSignIn
+  // If Firebase SDK fails to load, fall back gracefully
+  setTimeout(() => {
+    if (!window._auth) {
+      // Firebase not loaded — check local storage
+      const localAuth = localStorage.getItem('lv_auth');
+      $id('splash').classList.remove('active');
+      if (localAuth) {
+        $id('screen-auth').classList.remove('active');
+        showScreen('lectures');
+      }
+      // else auth screen stays visible
+    }
+  }, 3000);
+});
 </script>
 </body>
 </html>

@@ -1297,16 +1297,18 @@ async function searchBooks(){
   const el=$id('api-results');
   el.innerHTML='<div class="loading"><div class="spinner"></div>Recherche en cours…</div>';
   try{
-    const res=await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=6&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i`);
+    const res=await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=6&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i,subject,language`);
     const data=await res.json();
     if(!data.docs?.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun résultat trouvé</div>';return;}
     _searchResults = data.docs.map(b=>({
+      key:   b.key||'',
       titre: b.title||'',
-      auteur: (b.author_name||[])[0]||'',
+      auteur:(b.author_name||[])[0]||'',
       pages: b.number_of_pages_median||'',
-      editeur: (b.publisher||[])[0]||'',
+      editeur:(b.publisher||[])[0]||'',
       cover: b.cover_i?`https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`:'',
-      year: b.first_publish_year||''
+      year:  b.first_publish_year||'',
+      resume:''  // sera chargé au clic
     }));
     el.innerHTML = _searchResults.map((b,i)=>`
       <div class="search-result" onclick="fillFromSearch(${i})" style="cursor:pointer">
@@ -1321,17 +1323,50 @@ async function searchBooks(){
   }catch(e){el.innerHTML='<div style="color:var(--rose);font-size:13px;padding:8px 0">Erreur de connexion</div>'}
 }
 
-function fillFromSearch(index){
+async function fillFromSearch(index){
   const book = _searchResults[index];
   if(!book) return;
-  $id('f-titre').value=book.titre||'';
-  $id('f-auteur').value=book.auteur||'';
-  $id('f-pages').value=book.pages||'';
-  $id('f-editeur').value=book.editeur||'';
-  $id('f-cover').value=book.cover||'';
-  $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations récupérées !</div>';
+
+  // Remplir immédiatement les champs connus
+  $id('f-titre').value  = book.titre||'';
+  $id('f-auteur').value = book.auteur||'';
+  $id('f-pages').value  = book.pages||'';
+  $id('f-editeur').value= book.editeur||'';
+  $id('f-cover').value  = book.cover||'';
   $id('search-api').value='';
-  // Scroll to title field
+  $id('api-results').innerHTML='<div class="loading"><div class="spinner"></div>Récupération du résumé…</div>';
+
+  // Charger le résumé depuis l'API Works d'Open Library
+  try{
+    if(book.key){
+      const workRes = await fetch(`https://openlibrary.org${book.key}.json`);
+      const workData = await workRes.json();
+
+      // Résumé
+      let resume = '';
+      if(workData.description){
+        resume = typeof workData.description === 'string'
+          ? workData.description
+          : workData.description.value || '';
+      } else if(workData.notes){
+        resume = typeof workData.notes === 'string' ? workData.notes : workData.notes.value||'';
+      }
+      // Nettoyer le résumé (enlever les liens Markdown)
+      resume = resume.replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/\r?\n/g,' ').trim();
+      if(resume.length > 800) resume = resume.substring(0,800)+'…';
+      if(resume) $id('f-resume').value = resume;
+
+      // Nombre de pages depuis l'édition si manquant
+      if(!book.pages && workData.number_of_pages){
+        $id('f-pages').value = workData.number_of_pages;
+      }
+    }
+    $id('api-results').innerHTML=`<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations récupérées${$id('f-resume').value?' avec résumé':''} !</div>`;
+  }catch(e){
+    $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations de base récupérées</div>';
+  }
+
+  // Scroll vers le titre
   setTimeout(()=>$id('f-titre').scrollIntoView({behavior:'smooth',block:'center'}), 100);
 }
 

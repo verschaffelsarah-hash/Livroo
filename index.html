@@ -1450,24 +1450,47 @@ function openBadgeDetail(idx){
   var coups=DB.books().filter(function(b){return b.coup;});
   var badges=computeBadges(lus,coups,DB.quotes(),DB.friends());
   var b=badges[idx]; if(!b)return;
+  var DESCS={
+    'first':   'Vous avez franchi le premier pas : un livre lu, une histoire vécue. Toute grande bibliothèque commence par un seul livre.',
+    'five':    'Cinq livres au compteur ! Vous avez déjà voyagé dans plusieurs univers et accumulé des heures bien méritées.',
+    'ten':     'Dix livres ! La plupart des gens ne lisent que 4 livres par an — vous les dépassez déjà largement.',
+    'twenty':  'Vingt livres ! Un accomplissement remarquable. Vous faites partie des grands lecteurs de Livroo.',
+    'coup':    'Ces livres qui nous marquent vraiment méritent une place à part. Votre premier coup de cœur est enregistré pour toujours.',
+    'friend':  'La lecture est encore meilleure quand on la partage. Bienvenue dans la dimension sociale de Livroo !',
+    'friends5':'Cinq amis sur Livroo, c’est un véritable cercle de lecture. Vos échanges vont s’enrichir mutuellement.',
+    'ambass':  'Vous avez convaincu quelqu’un de rejoindre Livroo. Merci de faire grandir notre communauté !',
+    'super':   'Cinq personnes ont rejoint Livroo grâce à vous. Vous êtes un véritable pilier de la communauté.',
+    'quote':   'Une phrase qui vous a touché(e), méritée d’être relue. Vos citations sont un journal intime de vos émotions.',
+    'critic':  'Trois livres notés 4★ ou plus : vous savez reconnaître la qualité et n’hésitez pas à l’exprimer.',
+    'explorer':'Thriller, romance, sci-fi… Vous refusez de vous enfermer dans un seul genre. Bravo pour votre curiosité !',
+    'goal':    'Fixer un objectif et l’atteindre, c’est la marque des grands lecteurs disciplinés. Félicitations !',
+    'week':    'Les bonnes habitudes se construisent petit à petit. Une semaine sur Livroo, vous êtes sur la bonne voie.',
+    'month':   'Un mois de fidélité ! Livroo est devenu une partie de votre quotidien. Merci de faire partie de l’aventure.',
+    'months3': 'Trois mois ! Vous êtes l’un(e) des membres les plus fidèles. Votre engagement inspire les nouveaux venus.',
+    'year':    'Un an sur Livroo ! Vous avez traversé toutes les saisons avec vos livres. Légende vivante de la communauté.',
+    'p1000':   'Mille pages, c’est l’équivalent de 3 à 4 romans entiers. Vos yeux ont parcouru des mondes imaginaires.',
+    'p5000':   'Cinq mille pages ! Vous pourriez presque écrire votre propre roman avec tout ce que vous avez lu. Extraordinaire.',
+    'share':   'Votre bibliothèque est visible par le monde. Vous inspirez peut-être déjà quelqu’un à lire son prochain livre favori.'
+  };
   var dates=DB.get('lv_badge_dates',{});
-  var ds=dates[b.id]?(' le '+new Date(dates[b.id]).toLocaleDateString('fr-FR')):'';
-  var sc=b.unlocked?'var(--gold2)':'var(--text3)';
-  var st=b.unlocked?'✅ Débloqué'+ds:'🔒 Pas encore débloqué';
-  var html='<div style="font-size:52px;margin-bottom:10px;'+(b.unlocked?'':'filter:grayscale(1);opacity:.4')+'">'+b.icon+'</div>'
-    +'<div style="font-family:Fraunces,serif;font-size:20px;color:var(--cream);margin-bottom:6px">'+b.name+'</div>'
-    +'<div style="font-size:13px;color:'+sc+';font-weight:600;margin-bottom:16px">'+st+'</div>'
-    +'<div style="background:var(--bg3);border-radius:12px;padding:14px;text-align:left;margin-bottom:10px">'
-    +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Condition</div>'
-    +'<div style="font-size:13px;color:var(--text)">'+(b.cond||b.name)+'</div></div>';
-  if(!b.unlocked&&b.how){
-    html+='<div style="background:var(--bg3);border-radius:12px;padding:14px;text-align:left;margin-bottom:10px">'
-      +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Comment l’obtenir</div>'
-      +'<div style="font-size:13px;color:var(--text)">'+b.how+'</div></div>';
+  var ds=dates[b.id]?(' le '+new Date(dates[b.id]).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})):'';
+  var desc=DESCS[b.id]||'';
+  var html='<div style="font-size:56px;margin-bottom:12px;'+(b.unlocked?'':'filter:grayscale(1);opacity:.35')+'">'+b.icon+'</div>'
+    +'<div style="font-family:Fraunces,serif;font-size:21px;color:var(--cream);margin-bottom:8px">'+b.name+'</div>'
+    +'<div style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:18px;'
+    +(b.unlocked
+      ? 'background:rgba(232,197,106,.15);color:var(--gold2);border:1px solid rgba(232,197,106,.3)">✅ Débloqué'+ds
+      : 'background:rgba(80,72,112,.3);color:var(--text3);border:1px solid var(--border)">🔒 Verrouillé')
+    +'</div>';
+  if(desc)html+='<div style="background:linear-gradient(135deg,rgba(124,92,191,.1),rgba(92,196,176,.08));border:1px solid rgba(124,92,191,.2);border-radius:14px;padding:16px;text-align:left;margin-bottom:12px"><div style="font-size:12px;font-style:italic;color:var(--text2);line-height:1.75">'+desc+'</div></div>';
+  html+='<div style="background:var(--bg3);border-radius:12px;padding:13px 14px;text-align:left;margin-bottom:10px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Condition</div><div style="font-size:13px;color:var(--text);font-weight:500">'+(b.cond||b.name)+'</div></div>';
+  if(!b.unlocked&&b.how)html+='<div style="background:rgba(92,196,176,.07);border:1px solid rgba(92,196,176,.18);border-radius:12px;padding:13px 14px;text-align:left;margin-bottom:10px"><div style="font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Comment l’obtenir</div><div style="font-size:13px;color:var(--text)">'+b.how+'</div></div>';
+  if(b.prog){
+    var parts=String(b.prog).split('/');
+    var cur=parseFloat(parts[0])||0, tot=parseFloat(parts[1]);
+    var pct=tot>0?Math.min(100,Math.round(cur/tot*100)):b.unlocked?100:0;
+    html+='<div style="background:var(--bg3);border-radius:12px;padding:13px 14px;text-align:left"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Progression</div><div style="font-size:14px;color:'+(b.unlocked?'var(--teal)':'var(--violet2)')+';font-family:Fraunces,serif;font-weight:600">'+b.prog+'</div></div><div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(b.unlocked?'var(--teal)':'var(--violet2)')+';border-radius:3px;transition:width .6s ease"></div></div></div>';
   }
-  html+='<div style="background:var(--bg3);border-radius:12px;padding:14px;text-align:left">'
-    +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Progression</div>'
-    +'<div style="font-size:17px;color:'+(b.unlocked?'var(--teal)':'var(--violet2)')+';font-family:Fraunces,serif;font-weight:600">'+(b.prog||'—')+'</div></div>';
   document.getElementById('badge-detail-content').innerHTML=html;
   document.getElementById('modal-badge').classList.add('open');
 }

@@ -1307,7 +1307,13 @@ function renderProfil(){
       <button class="btn btn-gold" style="width:100%;margin-top:12px" onclick="shareInviteCode()">🎁 Partager mon code d\'invitation</button>
     </div>
     <button class="btn btn-danger" style="width:100%;margin-top:18px" onclick="doLogout()">🚪 Se déconnecter</button>
+  <button class="btn btn-secondary" style="width:100%;margin-top:10px;border-color:rgba(232,197,106,.3);color:var(--gold2)" onclick="setupNotifications()" id="notif-setup-btn">🔔 Activer les notifications</button>
   `;
+  // Update notif button text after render
+  setTimeout(function(){
+    var nb = document.getElementById('notif-setup-btn');
+    if(nb && localStorage.getItem('lv_notifs_enabled')) nb.innerHTML = '🔔 Notifications activées ✅';
+  }, 50);
 }
 
 function computeBadges(lus,coups,quotes,friends){
@@ -1492,6 +1498,7 @@ $id('btn-save').addEventListener('click',()=>{
     const quotes=DB.quotes();quotes.unshift({text:book.citation,book:book.titre,author:book.auteur});
     DB.saveQuotes(quotes);
   }
+  if(book.statut==='Lu') updateLastRead();
   $id('modal-add').classList.remove('open');renderBooks();
 });
 
@@ -1902,9 +1909,199 @@ function sharePublicProfile() {
 }
 
 // ════════════════════════════════════════════
+// NOTIFICATIONS PUSH
+// ════════════════════════════════════════════
+
+// Clé VAPID publique pour les notifications push (générée)
+const VAPID_PUBLIC_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBZuhbgE8nr7VnhxqoXCM7cH6IQ';
+
+async function requestNotifPermission() {
+  if(!('Notification' in window)) return false;
+  if(Notification.permission === 'granted') return true;
+  if(Notification.permission === 'denied') return false;
+  const result = await Notification.requestPermission();
+  return result === 'granted';
+}
+
+async function subscribePush() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const existing = await reg.pushManager.getSubscription();
+    if(existing) return existing;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+    // Sauvegarder la souscription dans Supabase
+    const uid = localStorage.getItem('lv_uid');
+    if(uid) {
+      await _supa.from('profiles').update({
+        push_sub: JSON.stringify(sub)
+      }).eq('id', uid);
+    }
+    return sub;
+  } catch(e) { console.warn('Push subscribe error:', e); return null; }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for(let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+// Notification locale (in-app + système si permission accordée)
+function sendLocalNotif(title, body, icon) {
+  icon = icon || '📚';
+  // Notification in-app (toujours visible)
+  showInAppNotif(title, body, icon);
+  // Notification système si permission accordée
+  if(Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(function(reg) {
+      reg.showNotification(title, {
+        body: body,
+        icon: 'icon-192.png',
+        badge: 'icon-192.png',
+        vibrate: [200, 100, 200],
+        tag: 'livroo-notif',
+        data: { url: window.location.href }
+      });
+    });
+  }
+}
+
+// Notification visuelle in-app (barre en haut)
+function showInAppNotif(title, body, icon) {
+  let n = document.getElementById('inapp-notif');
+  if(!n) {
+    n = document.createElement('div');
+    n.id = 'inapp-notif';
+    n.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:600;background:var(--bg2);border-bottom:1px solid var(--border2);padding:12px 16px calc(12px + env(safe-area-inset-top,0px)) 16px;display:none;animation:slideDown .3s ease;cursor:pointer;backdrop-filter:blur(20px)';
+    n.innerHTML = '<div style="display:flex;align-items:center;gap:12px"><div id="ian-icon" style="font-size:24px;flex-shrink:0"></div><div><div id="ian-title" style="font-size:13px;color:var(--cream);font-weight:600"></div><div id="ian-body" style="font-size:11px;color:var(--text2);margin-top:2px"></div></div><button style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer" onclick="document.getElementById(\'inapp-notif\').style.display=\'none\'">✕</button></div>';
+    n.onclick = function(e) { if(e.target.tagName !== 'BUTTON') n.style.display='none'; };
+    document.body.appendChild(n);
+    // Add animation
+    var style = document.createElement('style');
+    style.textContent = '@keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}';
+    document.head.appendChild(style);
+  }
+  document.getElementById('ian-icon').textContent  = icon || '📚';
+  document.getElementById('ian-title').textContent = title;
+  document.getElementById('ian-body').textContent  = body;
+  n.style.display = 'block';
+  setTimeout(function() { if(n) n.style.display='none'; }, 5000);
+}
+
+// ── Vérifications périodiques (au lancement de l'app) ──
+async function checkAllNotifications() {
+  const uid = localStorage.getItem('lv_uid');
+  if(!uid || localStorage.getItem('lv_guest')==='1') return;
+
+  // 1. Demandes d'amis en attente
+  try {
+    const pending = await loadPendingRequests();
+    if(pending.length > 0) {
+      const seen = JSON.parse(localStorage.getItem('lv_notif_seen_reqs') || '[]');
+      const newOnes = pending.filter(function(r){ return !seen.includes(r.id); });
+      if(newOnes.length > 0) {
+        const names = newOnes.map(function(r){ return r.profiles ? r.profiles.pseudo : 'Quelqu\u2019un'; });
+        sendLocalNotif(
+          newOnes.length === 1 ? '\uD83E\uDD1D Demande d\u2019ami' : '\uD83E\uDD1D ' + newOnes.length + ' demandes d\u2019amis',
+          names.join(', ') + (newOnes.length === 1 ? ' souhaite vous ajouter !' : ' souhaitent vous ajouter !'),
+          '\uD83E\uDD1D'
+        );
+        const updatedSeen = seen.concat(newOnes.map(function(r){ return r.id; }));
+        localStorage.setItem('lv_notif_seen_reqs', JSON.stringify(updatedSeen));
+      }
+    }
+  } catch(e) {}
+
+  // 2. Recommandations non vues
+  const recos = DB.recos().filter(function(r){ return r.to==='me' && !r.dismissed; });
+  const seenRecos = JSON.parse(localStorage.getItem('lv_notif_seen_recos') || '[]');
+  const newRecos  = recos.filter(function(r){ return !seenRecos.includes(r.id); });
+  if(newRecos.length > 0) {
+    sendLocalNotif(
+      '\uD83D\uDC8C ' + (newRecos.length === 1 ? 'Nouvelle recommandation' : newRecos.length + ' nouvelles recommandations'),
+      newRecos.length === 1
+        ? newRecos[0].fromName + ' vous recommande \u00ab\u00a0' + newRecos[0].book.titre + '\u00a0\u00bb'
+        : 'Consultez l\u2019onglet Amis pour les voir',
+      '\uD83D\uDC8C'
+    );
+    localStorage.setItem('lv_notif_seen_recos', JSON.stringify(seenRecos.concat(newRecos.map(function(r){ return r.id; }))));
+  }
+
+  // 3. Rappel de lecture — 7 jours sans activité
+  const lastRead = parseInt(localStorage.getItem('lv_last_read') || '0');
+  const daysSinceRead = Math.floor((Date.now() - lastRead) / 86400000);
+  const notifReadKey = 'lv_notif_read_sent';
+  const lastReminderSent = parseInt(localStorage.getItem(notifReadKey) || '0');
+  const daysSinceReminder = Math.floor((Date.now() - lastReminderSent) / 86400000);
+  if(lastRead > 0 && daysSinceRead >= 7 && daysSinceReminder >= 7) {
+    const books = DB.books().filter(function(b){ return b.statut === 'En cours'; });
+    const msg = books.length > 0
+      ? 'Reprenez ' + books[0].titre + ' \u2014 vous en \u00e9tiez \u00e0 la page ' + (books[0].currentPage || '?')
+      : 'Cela fait ' + daysSinceRead + ' jours sans lecture \u2014 un bon livre vous attend !';
+    sendLocalNotif('\uD83D\uDCD6 Rappel de lecture', msg, '\uD83D\uDCD6');
+    localStorage.setItem(notifReadKey, Date.now().toString());
+  }
+
+  // 4. Objectif annuel — rappel si on est à mi-année et en retard
+  const goal = DB.goal();
+  if(goal.target) {
+    const lus = DB.books().filter(function(b){ return b.statut === 'Lu'; }).length;
+    const now  = new Date();
+    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+    const expectedAtThisPoint = Math.round(goal.target * dayOfYear / 365);
+    const behind = expectedAtThisPoint - lus;
+    const goalNotifKey = 'lv_notif_goal_' + now.getFullYear() + '_' + Math.floor(dayOfYear / 30);
+    if(behind >= 2 && !localStorage.getItem(goalNotifKey)) {
+      sendLocalNotif(
+        '\uD83C\uDFAF Objectif annuel',
+        'Vous avez ' + lus + ' livre' + (lus !== 1 ? 's' : '') + ' lus sur ' + goal.target + ' \u2014 encore ' + (goal.target - lus) + ' pour atteindre votre objectif !',
+        '\uD83C\uDFAF'
+      );
+      localStorage.setItem(goalNotifKey, '1');
+    }
+  }
+}
+
+// Mettre à jour lv_last_read à chaque ajout de livre lu
+function updateLastRead() {
+  localStorage.setItem('lv_last_read', Date.now().toString());
+}
+
+// ── Demander la permission et s'abonner ──
+async function setupNotifications() {
+  if(!('Notification' in window) && !('serviceWorker' in navigator)) {
+    toast('\u26A0\uFE0F Notifications non support\u00e9es sur cet appareil');
+    return;
+  }
+  const granted = await requestNotifPermission();
+  if(granted) {
+    await subscribePush();
+    toast('\uD83D\uDD14 Notifications activ\u00e9es !');
+    localStorage.setItem('lv_notifs_enabled', '1');
+  } else {
+    toast('\u274C Notifications refus\u00e9es — activez-les dans les r\u00e9glages');
+  }
+}
+
+// ════════════════════════════════════════════
 // SERVICE WORKER
 // ════════════════════════════════════════════
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').then(function(reg) {
+    // Écouter les messages du service worker (ex: clic sur notif)
+    navigator.serviceWorker.addEventListener('message', function(e) {
+      if(e.data && e.data.type === 'NOTIF_CLICK') {
+        showScreen(e.data.screen || 'social');
+      }
+    });
+  }).catch(function(){});
+}
 
 // ════════════════════════════════════════════
 // INIT — gestion robuste de la session
@@ -1923,6 +2120,7 @@ if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch((
     if(auth)   auth.classList.remove('active');
     showScreen('lectures');
     setTimeout(checkBadgesIfNeeded, 1000);
+    setTimeout(checkAllNotifications, 2000);
   }
 
   function goToAuth() {

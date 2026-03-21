@@ -315,70 +315,108 @@
 <!-- Supabase SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-// ══════════════════════════════════════════════════
-// ⚠️  REMPLACEZ CES 2 VALEURS PAR LES VÔTRES
-//     (Settings → API dans votre projet Supabase)
-// ══════════════════════════════════════════════════
 const SUPABASE_URL  = 'https://umvgeyjikkgwjylqsojr.supabase.co';
 const SUPABASE_ANON = 'sb_publishable_i8ruQsbwr8x0c4zRZam4yw_Kt8tIfsS';
-
 const _supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// ── Vérification pseudo unique ──
-window._checkPseudo = async (pseudo) => {
+// ════════════════════════════════════════
+// CLOUD SYNC
+// ════════════════════════════════════════
+async function cloudSave() {
+  const uid = localStorage.getItem('lv_uid');
+  if(!uid || localStorage.getItem('lv_guest')==='1') return;
   try {
-    const { data } = await _supa.from('profiles').select('id').eq('pseudo', pseudo).maybeSingle();
-    return !data; // true = disponible
-  } catch(e) { return true; }
+    await _supa.from('user_data').upsert({
+      id: uid,
+      books:   DB.books(),
+      quotes:  DB.quotes(),
+      wish:    DB.wish(),
+      goal:    DB.goal(),
+      friends: DB.friends(),
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' });
+  } catch(e) { console.warn('Cloud save:', e); }
+}
+
+async function cloudLoad(uid) {
+  try {
+    const { data } = await _supa.from('user_data').select('*').eq('id', uid).maybeSingle();
+    if(data) {
+      if(data.books   && data.books.length)   { localStorage.setItem('lv_books',   JSON.stringify(data.books));   }
+      if(data.quotes  && data.quotes.length)  { localStorage.setItem('lv_quotes',  JSON.stringify(data.quotes));  }
+      if(data.wish    && data.wish.length)    { localStorage.setItem('lv_wish',    JSON.stringify(data.wish));    }
+      if(data.goal    && data.goal.target)    { localStorage.setItem('lv_goal',    JSON.stringify(data.goal));    }
+      if(data.friends && data.friends.length) { localStorage.setItem('lv_friends', JSON.stringify(data.friends)); }
+      return true;
+    }
+  } catch(e) { console.warn('Cloud load:', e); }
+  return false;
+}
+
+// Auto-save on every data change (wrapped after DB is defined in main script)
+window._cloudSave = cloudSave;
+
+// ── Pseudo unique ──
+window._checkPseudo = async (pseudo) => {
+  try { const { data } = await _supa.from('profiles').select('id').eq('pseudo', pseudo).maybeSingle(); return !data; }
+  catch(e) { return true; }
 };
 
 // ── Inscription ──
 window._signUp = async (emailOrPhone, password, pseudo) => {
   const email = emailOrPhone.includes('@') ? emailOrPhone : emailOrPhone.replace(/\s/g,'') + '@livroo.app';
   const { data, error } = await _supa.auth.signUp({ email, password });
-  if (error) throw error;
+  if(error) throw error;
   const code = Math.random().toString(36).substring(2,8).toUpperCase();
-  await _supa.from('profiles').insert({ id: data.user.id, pseudo, contact: emailOrPhone, code, created_at: new Date().toISOString() });
+  await _supa.from('profiles').insert({ id: data.user.id, pseudo, contact: emailOrPhone, code, created_at: new Date().toISOString(), joined_at: Date.now() });
+  await _supa.from('user_data').insert({ id: data.user.id, books: [], quotes: [], wish: [], goal: {}, friends: [] });
   localStorage.setItem('lv_username', pseudo);
   localStorage.setItem('lv_mycode', code);
+  localStorage.setItem('lv_uid', data.user.id);
 };
 
 // ── Connexion ──
 window._signIn = async (emailOrPhone, password) => {
   const email = emailOrPhone.includes('@') ? emailOrPhone : emailOrPhone.replace(/\s/g,'') + '@livroo.app';
   const { error } = await _supa.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  // Charger le profil
+  if(error) throw error;
   const { data: { user } } = await _supa.auth.getUser();
-  if (user) {
+  if(user) {
+    localStorage.setItem('lv_uid', user.id);
     const { data: profile } = await _supa.from('profiles').select('*').eq('id', user.id).maybeSingle();
-    if (profile) {
+    if(profile) {
       localStorage.setItem('lv_username', profile.pseudo || 'Lecteur');
-      localStorage.setItem('lv_mycode', profile.code || DB.myCode());
+      localStorage.setItem('lv_mycode', profile.code || '');
+      if(profile.avatar) localStorage.setItem('lv_avatar', profile.avatar);
     }
+    await cloudLoad(user.id);
   }
 };
 
 // ── Déconnexion ──
 window._signOut = async () => {
+  await cloudSave();
   await _supa.auth.signOut();
+  localStorage.removeItem('lv_uid');
 };
 
-// Fast async session check (runs before DOM)
+// ── Session check rapide ──
 (async function(){
-  if(localStorage.getItem('lv_guest')==='1'){window._guestMode=true;return;}
-  try{
-    var s=await _supa.auth.getSession();
-    if(s.data.session){
-      var p=await _supa.from('profiles').select('*').eq('id',s.data.session.user.id).maybeSingle();
-      if(p.data){
-        localStorage.setItem('lv_username',p.data.pseudo||'Lecteur');
-        localStorage.setItem('lv_mycode',p.data.code||'');
-        if(p.data.avatar)localStorage.setItem('lv_avatar',p.data.avatar);
+  if(localStorage.getItem('lv_guest')==='1'){ window._guestMode=true; return; }
+  try {
+    const { data: { session } } = await _supa.auth.getSession();
+    if(session) {
+      localStorage.setItem('lv_uid', session.user.id);
+      const { data: profile } = await _supa.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
+      if(profile) {
+        localStorage.setItem('lv_username', profile.pseudo || 'Lecteur');
+        localStorage.setItem('lv_mycode', profile.code || '');
+        if(profile.avatar) localStorage.setItem('lv_avatar', profile.avatar);
       }
-      window._sessionReady=true;
+      await cloudLoad(session.user.id);
+      window._sessionReady = true;
     }
-  }catch(e){console.warn(e);}
+  } catch(e) { console.warn(e); }
 })();
 </script>
 
@@ -724,21 +762,24 @@ const DB = {
   get(k,d=[]){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},
   set(k,v){localStorage.setItem(k,JSON.stringify(v))},
   books(){return this.get('lv_books')},
-  saveBooks(d){this.set('lv_books',d)},
+  saveBooks(d){this.set('lv_books',d); if(window._cloudSave)window._cloudSave();},
   friends(){return this.get('lv_friends')},
-  saveFriends(d){this.set('lv_friends',d)},
+  saveFriends(d){this.set('lv_friends',d); if(window._cloudSave)window._cloudSave();},
   recos(){return this.get('lv_recos')},
   saveRecos(d){this.set('lv_recos',d)},
   quotes(){return this.get('lv_quotes')},
-  saveQuotes(d){this.set('lv_quotes',d)},
+  saveQuotes(d){this.set('lv_quotes',d); if(window._cloudSave)window._cloudSave();},
   goal(){return this.get('lv_goal',{target:0,year:new Date().getFullYear()})},
-  saveGoal(d){this.set('lv_goal',d)},
+  saveGoal(d){this.set('lv_goal',d); if(window._cloudSave)window._cloudSave();},
+  wish(){return this.get('lv_wish')},
+  saveWish(d){this.set('lv_wish',d); if(window._cloudSave)window._cloudSave();},
   myCode(){
     let c=localStorage.getItem('lv_mycode');
     if(!c){c=Math.random().toString(36).substring(2,8).toUpperCase();localStorage.setItem('lv_mycode',c);}
     return c;
   },
   userName(){return localStorage.getItem('lv_username')||'Moi'},
+  avatar(){return localStorage.getItem('lv_avatar')||''},
 };
 
 // ════════════════════════════════════════════

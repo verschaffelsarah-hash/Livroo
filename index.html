@@ -583,7 +583,7 @@ window._signOut = async () => {
           <span style="font-size:13px;color:var(--text2)">Rester connecté(e)</span>
         </label>
 
-        <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="doSignIn()">🚀 Se connecter</button>
+        <button class="btn btn-primary" style="width:100%;margin-top:10px" id="signin-btn" onclick="doSignIn()">🚀 Se connecter</button>
       </div>
     </div>
 
@@ -1698,8 +1698,7 @@ async function doSignUp() {
   try {
     await window._signUp(contact, password, pseudo);
     toast('✨ Bienvenue, ' + pseudo + ' !');
-    $id('screen-auth').classList.remove('active');
-    showScreen('lectures');
+    // La navigation est gérée par onAuthStateChange — pas de redirect manuel
   } catch(e) {
     const msg = (e.message || '').toLowerCase();
     let err = '⚠️ Erreur lors de la création du compte';
@@ -1714,20 +1713,17 @@ async function doSignUp() {
 async function doSignIn() {
   const contact = $id('signin-contact').value.trim();
   const password = $id('signin-password').value;
-  const rememberMe = $id('remember-me')?.checked ?? true;
   $id('auth-error').style.display = 'none';
   if (!contact || !password) { showAuthError('⚠️ Remplissez tous les champs'); return; }
 
+  const signinBtn = $id('signin-btn') || { textContent:'', disabled:false };
+  signinBtn.textContent = '⏳…'; signinBtn.disabled = true;
+
   try {
-    // Supabase gère la persistance de session nativement
-    // On stocke la préférence pour l'affichage
-    if (rememberMe) localStorage.setItem('lv_remember', '1');
-    else localStorage.removeItem('lv_remember');
     localStorage.removeItem('lv_guest');
     await window._signIn(contact, password);
-    $id('screen-auth').classList.remove('active');
-    showScreen('lectures');
     toast('👋 Bon retour sur Livroo !');
+    // La navigation est gérée par onAuthStateChange
   } catch(e) {
     const msg = (e.message || '').toLowerCase();
     let err = '⚠️ Identifiants incorrects';
@@ -1735,7 +1731,7 @@ async function doSignIn() {
     else if (msg.includes('too many') || msg.includes('rate')) err = '⚠️ Trop de tentatives, réessayez dans quelques minutes';
     else if (msg.includes('network') || msg.includes('fetch')) err = '⚠️ Problème de connexion internet';
     showAuthError(err);
-  }
+  } finally { signinBtn.textContent = '🚀 Se connecter'; signinBtn.disabled = false; }
 }
 
 // ════════════════════════════════════════════
@@ -1744,7 +1740,9 @@ async function doSignIn() {
 function enterAsGuest() {
   localStorage.setItem('lv_guest', '1');
   localStorage.setItem('lv_username', 'Invité');
-  $id('screen-auth').classList.remove('active');
+  // Forcer la navigation directement (pas d'onAuthStateChange en mode invité)
+  document.getElementById('screen-auth').classList.remove('active');
+  document.getElementById('splash').classList.remove('active');
   showScreen('lectures');
   toast('👋 Mode invité — vos données ne seront pas sauvegardées');
 }
@@ -1757,6 +1755,7 @@ async function doLogout() {
   try {
     localStorage.removeItem('lv_guest');
     localStorage.removeItem('lv_remember');
+    // Supabase onAuthStateChange gérera la redirection vers l'écran d'auth
     if (window._signOut) await window._signOut();
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     $id('screen-auth').classList.add('active');
@@ -1907,6 +1906,91 @@ function sharePublicProfile() {
 // ════════════════════════════════════════════
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 
+// ════════════════════════════════════════════
+// INIT — gestion robuste de la session
+// ════════════════════════════════════════════
+(function initApp() {
+
+  // Indique si on a déjà navigué vers l'app (évite les doubles redirections)
+  var _navigated = false;
+
+  function goToApp() {
+    if(_navigated) return;
+    _navigated = true;
+    var splash = document.getElementById('splash');
+    var auth   = document.getElementById('screen-auth');
+    if(splash) splash.classList.remove('active');
+    if(auth)   auth.classList.remove('active');
+    showScreen('lectures');
+    setTimeout(checkBadgesIfNeeded, 1000);
+  }
+
+  function goToAuth() {
+    if(_navigated) return; // Déjà connecté, ne pas renvoyer vers l'auth
+    var splash = document.getElementById('splash');
+    var auth   = document.getElementById('screen-auth');
+    if(splash) splash.classList.remove('active');
+    if(auth)   auth.classList.add('active');
+  }
+
+  // ── Écoute permanente des changements d'état d'auth Supabase ──
+  // Ceci gère : connexion, déconnexion, expiration de token, refresh automatique
+  _supa.auth.onAuthStateChange(function(event, session) {
+    if(event === 'SIGNED_IN' && session) {
+      // Charger le profil et les données
+      Promise.all([
+        _supa.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
+        cloudLoad(session.user.id)
+      ]).then(function(results) {
+        var profile = results[0].data;
+        if(profile) {
+          localStorage.setItem('lv_username', profile.pseudo || 'Lecteur');
+          localStorage.setItem('lv_mycode',   profile.code   || DB.myCode());
+          localStorage.setItem('lv_uid',      session.user.id);
+          if(profile.avatar) localStorage.setItem('lv_avatar', profile.avatar);
+        }
+        goToApp();
+      }).catch(function() { goToApp(); });
+
+    } else if(event === 'SIGNED_OUT') {
+      // Vraie déconnexion — réinitialiser
+      _navigated = false;
+      localStorage.removeItem('lv_uid');
+      localStorage.removeItem('lv_guest');
+      document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+      var auth = document.getElementById('screen-auth');
+      if(auth) auth.classList.add('active');
+      if(typeof switchAuthTab === 'function') switchAuthTab('signup');
+
+    } else if(event === 'TOKEN_REFRESHED') {
+      // Token rafraîchi silencieusement — pas de redirection
+      if(session) localStorage.setItem('lv_uid', session.user.id);
+    }
+  });
+
+  // ── Au chargement du DOM ──
+  document.addEventListener('DOMContentLoaded', function() {
+    // Mode invité : aller directement dans l'app
+    if(localStorage.getItem('lv_guest') === '1') {
+      goToApp();
+      return;
+    }
+
+    // Si la session a déjà été vérifiée par le script inline (avant DOM)
+    // on attend un court délai pour que onAuthStateChange déclenche
+    // Si après 2s rien ne s'est passé → afficher l'écran d'auth
+    var fallbackTimer = setTimeout(function() {
+      if(!_navigated) goToAuth();
+    }, 2000);
+
+    // Si _sessionReady est déjà positionné → aller dans l'app tout de suite
+    if(window._sessionReady) {
+      clearTimeout(fallbackTimer);
+      goToApp();
+    }
+  });
+
+})();
 </script>
 </body>
 </html>

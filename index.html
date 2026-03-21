@@ -36,7 +36,7 @@
       --safe-bot: env(safe-area-inset-bottom, 0px);
     }
     *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-    html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;overflow:hidden}
+    html,body{height:100%;background:var(--bg);color:var(--text);font-family:DM Sans,sans-serif;overflow:hidden}
 
     /* ── SCREENS ── */
     .screen{position:fixed;inset:0;display:none;flex-direction:column;overflow:hidden}
@@ -45,7 +45,7 @@
     /* ── SPLASH ── */
     #splash{background:radial-gradient(ellipse at 50% 40%,#1e1040 0%,#0d0d1a 70%);justify-content:center;align-items:center;gap:18px;animation:fadeIn .5s ease}
     .splash-icon{font-size:72px;animation:float 3s ease-in-out infinite}
-    .splash-logo{font-family:'Fraunces',serif;font-size:48px;font-weight:700;background:linear-gradient(135deg,var(--violet2),var(--rose),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .splash-logo{font-family:Fraunces,serif;font-size:48px;font-weight:700;background:linear-gradient(135deg,var(--violet2),var(--rose),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
     .splash-tagline{font-size:13px;color:var(--text3);letter-spacing:3px;text-transform:uppercase}
     .splash-bar{width:140px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:10px}
     .splash-progress{height:100%;background:linear-gradient(90deg,var(--violet2),var(--rose));border-radius:2px;animation:progress 1.6s ease forwards}
@@ -55,7 +55,7 @@
 
     /* ── NAVBAR ── */
     .navbar{background:rgba(13,13,26,.96);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;padding:8px 4px calc(8px + var(--safe-bot));position:fixed;bottom:0;left:0;right:0;z-index:100}
-    .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;cursor:pointer;border:none;background:none;color:var(--text3);font-family:'DM Sans',sans-serif;transition:all .2s}
+    .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;cursor:pointer;border:none;background:none;color:var(--text3);font-family:DM Sans,sans-serif;transition:all .2s}
     .nav-btn.active{color:var(--violet2)}
     .nav-btn .icon{font-size:22px;transition:transform .2s}
     .nav-btn.active .icon{transform:scale(1.18)}
@@ -65,7 +65,7 @@
 
     /* ── HEADER ── */
     .header{padding:52px 20px 14px;background:linear-gradient(180deg,var(--bg2) 0%,transparent 100%);flex-shrink:0}
-    .header h1{font-family:'Fraunces',serif;font-size:26px;font-weight:600;color:var(--cream)}
+    .header h1{font-family:Fraunces,serif;font-size:26px;font-weight:600;color:var(--cream)}
     .header p{font-size:12px;color:var(--text3);margin-top:2px}
 
     /* ── SCROLL ── */
@@ -81,7 +81,7 @@
     .book-cover{width:58px;height:88px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:26px;border:1px solid var(--border2);overflow:hidden;position:relative}
     .book-cover img{width:100%;height:100%;object-fit:cover}
     .book-info{flex:1;min-width:0}
-    .book-title{font-family:'Fraunces',serif;font-size:16px;font-weight:600;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .book-title{font-family:Fraunces,serif;font-size:16px;font-weight:600;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .book-author{font-size:12px;color:var(--text2);margin-top:2px}
     .book-meta{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center}
     .badge{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:600}
@@ -101,12 +101,12 @@
     @keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
     .modal{background:var(--bg2);border:1px solid var(--border);border-top:1px solid var(--border2);border-radius:24px 24px 0 0;padding:20px 20px calc(24px + var(--safe-bot));width:100%;max-height:92vh;overflow-y:auto}
     .modal-handle{width:38px;height:4px;background:var(--border2);border-radius:2px;margin:0 auto 18px}
-    .modal h2{font-family:'Fraunces',serif;font-size:22px;color:var(--cream);margin-bottom:18px}
+    .modal h2{font-family:Fraunces,serif;font-size:22px;color:var(--cream);margin-bottom:18px}
 
     /* ── FORM ── */
     .form-group{margin-bottom:14px}
     .form-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;display:block}
-    .form-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:15px;outline:none;transition:border-color .2s;-webkit-appearance:none}
+    .form-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-family:DM Sans,sans-serif;font-size:15px;outline:none;transition:border-color .2s;-webkit-appearance:none}
     .form-input:focus{border-color:var(--violet2)}
     .form-input option{background:var(--bg3)}
     textarea.form-input{resize:none;height:80px}
@@ -114,7 +114,7 @@
     .star-btn{font-size:28px;cursor:pointer;transition:transform .15s;opacity:.25;border:none;background:none}
     .star-btn.active{opacity:1;transform:scale(1.1)}
     .btn-row{display:flex;gap:10px;margin-top:18px}
-    .btn{flex:1;padding:14px;border-radius:14px;border:none;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:500;cursor:pointer;transition:all .2s}
+    .btn{flex:1;padding:14px;border-radius:14px;border:none;font-family:DM Sans,sans-serif;font-size:15px;font-weight:500;cursor:pointer;transition:all .2s}
     .btn-primary{background:linear-gradient(135deg,var(--violet),var(--violet2));color:#fff}
     .btn-primary:active{transform:scale(.97)}
     .btn-secondary{background:var(--bg3);color:var(--text2);border:1px solid var(--border)}
@@ -123,7 +123,7 @@
 
     /* ── SEARCH BAR ── */
     .search-bar{display:flex;gap:8px;margin-bottom:14px}
-    .search-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none}
+    .search-input{flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:11px 14px;color:var(--text);font-family:DM Sans,sans-serif;font-size:14px;outline:none}
     .search-input:focus{border-color:var(--violet2)}
     .search-btn{background:var(--violet);border:none;border-radius:12px;padding:11px 16px;font-size:18px;cursor:pointer;color:#fff}
 
@@ -146,19 +146,19 @@
     /* ── DASHBOARD ── */
     .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
     .stat-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 14px;text-align:center}
-    .stat-num{font-family:'Fraunces',serif;font-size:34px;font-weight:700;color:var(--violet2);line-height:1}
+    .stat-num{font-family:Fraunces,serif;font-size:34px;font-weight:700;color:var(--violet2);line-height:1}
     .stat-label{font-size:10px;color:var(--text3);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
     .genre-bar{margin-bottom:10px}
     .genre-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:4px}
     .genre-track{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden}
     .genre-fill{height:100%;background:linear-gradient(90deg,var(--violet),var(--violet2));border-radius:3px;transition:width .6s ease}
-    .section-title{font-family:'Fraunces',serif;font-size:17px;font-weight:600;color:var(--cream);margin:20px 0 12px;display:flex;align-items:center;gap:8px}
+    .section-title{font-family:Fraunces,serif;font-size:17px;font-weight:600;color:var(--cream);margin:20px 0 12px;display:flex;align-items:center;gap:8px}
 
     /* ── GOAL WIDGET ── */
     .goal-card{background:linear-gradient(135deg,rgba(124,92,191,.15),rgba(232,124,138,.1));border:1px solid rgba(124,92,191,.25);border-radius:var(--radius);padding:18px;margin-bottom:14px}
     .goal-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
-    .goal-title{font-family:'Fraunces',serif;font-size:16px;color:var(--cream)}
-    .goal-count{font-family:'Fraunces',serif;font-size:22px;color:var(--violet2)}
+    .goal-title{font-family:Fraunces,serif;font-size:16px;color:var(--cream)}
+    .goal-count{font-family:Fraunces,serif;font-size:22px;color:var(--violet2)}
     .goal-track{height:10px;background:var(--bg3);border-radius:5px;overflow:hidden}
     .goal-fill{height:100%;background:linear-gradient(90deg,var(--violet),var(--rose));border-radius:5px;transition:width .8s ease}
     .goal-sub{font-size:11px;color:var(--text3);margin-top:8px;text-align:right}
@@ -178,21 +178,21 @@
     .shelf-books{display:flex;gap:5px;align-items:flex-end;min-height:110px;flex-wrap:wrap}
     .shelf-book{width:38px;border-radius:4px 6px 6px 4px;background:var(--color,#4a3080);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .2s;position:relative;flex-shrink:0;box-shadow:2px 2px 8px rgba(0,0,0,.5);overflow:hidden}
     .shelf-book:active{transform:translateY(-8px)}
-    .shelf-book .spine-title{writing-mode:vertical-rl;font-size:8px;color:rgba(255,255,255,.65);font-family:'Fraunces',serif;overflow:hidden;max-height:80%;padding:4px 0;white-space:nowrap;text-overflow:clip;position:relative;z-index:1}
+    .shelf-book .spine-title{writing-mode:vertical-rl;font-size:8px;color:rgba(255,255,255,.65);font-family:Fraunces,serif;overflow:hidden;max-height:80%;padding:4px 0;white-space:nowrap;text-overflow:clip;position:relative;z-index:1}
     .shelf-empty{font-size:12px;color:var(--text3);text-align:center;width:100%;padding:20px 0;font-style:italic}
 
     /* ── FRIENDS / SOCIAL ── */
     .friend-card{display:flex;align-items:center;gap:14px;padding:14px;background:var(--card);border:1px solid var(--border);border-radius:16px;margin-bottom:10px}
-    .friend-avatar{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;font-family:'Fraunces',serif;color:#fff;font-weight:700}
+    .friend-avatar{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;font-family:Fraunces,serif;color:#fff;font-weight:700}
     .friend-info{flex:1}
     .friend-name{font-size:15px;color:var(--cream);font-weight:500}
     .friend-sub{font-size:12px;color:var(--text3);margin-top:2px}
-    .friend-action{padding:7px 14px;border-radius:10px;font-size:12px;border:none;cursor:pointer;font-family:'DM Sans'}
+    .friend-action{padding:7px 14px;border-radius:10px;font-size:12px;border:none;cursor:pointer;font-family:DM Sans}
 
     /* ── ACTIVITY FEED ── */
     .activity-item{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border)}
     .activity-item:last-child{border-bottom:none}
-    .activity-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:#fff;font-weight:700;font-family:'Fraunces',serif}
+    .activity-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;color:#fff;font-weight:700;font-family:Fraunces,serif}
     .activity-text{flex:1;font-size:13px;color:var(--text2);line-height:1.5}
     .activity-text strong{color:var(--cream)}
     .activity-time{font-size:10px;color:var(--text3);margin-top:2px}
@@ -207,36 +207,36 @@
     .reco-cover{width:50px;height:74px;border-radius:8px;overflow:hidden;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:22px;border:1px solid var(--border2);flex-shrink:0}
     .reco-cover img{width:100%;height:100%;object-fit:cover}
     .reco-info{flex:1}
-    .reco-title{font-family:'Fraunces',serif;font-size:15px;color:var(--cream)}
+    .reco-title{font-family:Fraunces,serif;font-size:15px;color:var(--cream)}
     .reco-author{font-size:12px;color:var(--text2);margin-top:2px}
     .reco-msg{font-size:12px;color:var(--text2);margin-top:6px;font-style:italic;line-height:1.4}
     .reco-actions{display:flex;gap:8px;margin-top:10px}
-    .reco-btn{flex:1;padding:8px;border-radius:10px;font-size:12px;border:none;cursor:pointer;font-family:'DM Sans';font-weight:500}
+    .reco-btn{flex:1;padding:8px;border-radius:10px;font-size:12px;border:none;cursor:pointer;font-family:DM Sans;font-weight:500}
     .reco-add{background:rgba(124,92,191,.2);color:var(--violet3);border:1px solid rgba(124,92,191,.3)}
     .reco-dismiss{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
 
     /* ── MY CODE ── */
     .my-code-box{background:var(--bg3);border:2px dashed var(--border2);border-radius:16px;padding:20px;text-align:center;margin-bottom:20px}
     .my-code-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
-    .my-code{font-family:'Fraunces',serif;font-size:32px;font-weight:700;color:var(--violet2);letter-spacing:6px}
+    .my-code{font-family:Fraunces,serif;font-size:32px;font-weight:700;color:var(--violet2);letter-spacing:6px}
     .my-code-sub{font-size:12px;color:var(--text3);margin-top:8px}
     .share-btns{display:flex;gap:8px;margin-top:14px;justify-content:center}
-    .share-btn{padding:10px 18px;border-radius:12px;font-size:13px;border:none;cursor:pointer;font-family:'DM Sans';font-weight:500;display:flex;align-items:center;gap:6px;transition:all .2s}
+    .share-btn{padding:10px 18px;border-radius:12px;font-size:13px;border:none;cursor:pointer;font-family:DM Sans;font-weight:500;display:flex;align-items:center;gap:6px;transition:all .2s}
     .share-btn:active{transform:scale(.95)}
     .share-copy{background:rgba(124,92,191,.2);color:var(--violet3);border:1px solid rgba(124,92,191,.3)}
     .share-native{background:linear-gradient(135deg,var(--violet),var(--violet2));color:#fff}
 
     /* ── CITATIONS ── */
     .quote-card{background:linear-gradient(135deg,rgba(92,196,176,.08),rgba(124,92,191,.08));border:1px solid rgba(92,196,176,.2);border-radius:var(--radius);padding:18px;margin-bottom:12px;position:relative}
-    .quote-mark{font-family:'Fraunces',serif;font-size:48px;color:var(--teal);opacity:.2;position:absolute;top:8px;left:14px;line-height:1}
-    .quote-text{font-family:'Fraunces',serif;font-size:14px;font-style:italic;color:var(--cream);line-height:1.7;padding-left:6px;margin-bottom:10px;position:relative;z-index:1}
+    .quote-mark{font-family:Fraunces,serif;font-size:48px;color:var(--teal);opacity:.2;position:absolute;top:8px;left:14px;line-height:1}
+    .quote-text{font-family:Fraunces,serif;font-size:14px;font-style:italic;color:var(--cream);line-height:1.7;padding-left:6px;margin-bottom:10px;position:relative;z-index:1}
     .quote-source{font-size:11px;color:var(--text3)}
     .quote-source strong{color:var(--text2)}
 
     /* ── DETAIL ── */
     .detail-cover{width:110px;height:162px;border-radius:12px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;font-size:50px;overflow:hidden;border:1px solid var(--border2);box-shadow:0 12px 32px rgba(0,0,0,.5)}
     .detail-cover img{width:100%;height:100%;object-fit:cover}
-    .detail-title{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--cream);text-align:center;margin-bottom:4px}
+    .detail-title{font-family:Fraunces,serif;font-size:22px;font-weight:700;color:var(--cream);text-align:center;margin-bottom:4px}
     .detail-author{font-size:14px;color:var(--text2);text-align:center;margin-bottom:16px}
     .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
     .detail-item{background:var(--bg3);border-radius:12px;padding:10px 12px}
@@ -250,7 +250,7 @@
     /* ── EMPTY / LOADING ── */
     .empty{text-align:center;padding:50px 20px}
     .empty-icon{font-size:56px;margin-bottom:14px;opacity:.4}
-    .empty-title{font-family:'Fraunces',serif;font-size:20px;color:var(--text2);margin-bottom:8px}
+    .empty-title{font-family:Fraunces,serif;font-size:20px;color:var(--text2);margin-bottom:8px}
     .empty-sub{font-size:13px;color:var(--text3)}
     .loading{display:flex;align-items:center;gap:8px;color:var(--text3);font-size:13px;padding:14px 0}
     .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--violet2);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0}
@@ -266,15 +266,15 @@
 
     /* ── PROFILE HEADER ── */
     .profile-banner{background:linear-gradient(135deg,rgba(124,92,191,.2),rgba(232,124,138,.15));border:1px solid rgba(124,92,191,.25);border-radius:var(--radius);padding:20px;margin-bottom:16px;text-align:center}
-    .profile-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;font-weight:700;font-family:'Fraunces',serif;color:#fff}
-    .profile-name{font-family:'Fraunces',serif;font-size:20px;color:var(--cream)}
+    .profile-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;font-weight:700;font-family:Fraunces,serif;color:#fff}
+    .profile-name{font-family:Fraunces,serif;font-size:20px;color:var(--cream)}
     .profile-stats{display:flex;justify-content:center;gap:24px;margin-top:12px}
     .profile-stat{text-align:center}
-    .profile-stat-num{font-family:'Fraunces',serif;font-size:20px;color:var(--violet2)}
+    .profile-stat-num{font-family:Fraunces,serif;font-size:20px;color:var(--violet2)}
     .profile-stat-label{font-size:10px;color:var(--text3);text-transform:uppercase}
 
     /* ── INPUT FRIEND CODE ── */
-    .code-input{width:100%;background:var(--bg3);border:2px solid var(--border);border-radius:14px;padding:16px 14px;color:var(--violet2);font-family:'Fraunces',serif;font-size:24px;outline:none;transition:border-color .2s;text-align:center;letter-spacing:6px;font-weight:700;-webkit-appearance:none}
+    .code-input{width:100%;background:var(--bg3);border:2px solid var(--border);border-radius:14px;padding:16px 14px;color:var(--violet2);font-family:Fraunces,serif;font-size:24px;outline:none;transition:border-color .2s;text-align:center;letter-spacing:6px;font-weight:700;-webkit-appearance:none}
     .code-input:focus{border-color:var(--violet2)}
     .code-input::placeholder{color:var(--text3);letter-spacing:2px;font-size:18px}
 
@@ -283,10 +283,10 @@
     .auth-wrap{padding:60px 24px 40px;min-height:100%;display:flex;flex-direction:column}
     .auth-logo{text-align:center;margin-bottom:32px}
     .auth-logo-icon{font-size:56px;animation:float 3s ease-in-out infinite;display:block;margin-bottom:10px}
-    .auth-logo-text{font-family:'Fraunces',serif;font-size:42px;font-weight:700;background:linear-gradient(135deg,var(--violet2),var(--rose),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .auth-logo-text{font-family:Fraunces,serif;font-size:42px;font-weight:700;background:linear-gradient(135deg,var(--violet2),var(--rose),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
     .auth-logo-sub{font-size:12px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;margin-top:4px}
     .auth-tabs{display:flex;gap:4px;background:var(--bg3);border-radius:14px;padding:4px;margin-bottom:24px}
-    .auth-tab{flex:1;padding:10px;border-radius:10px;border:none;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;background:none;color:var(--text3)}
+    .auth-tab{flex:1;padding:10px;border-radius:10px;border:none;font-family:DM Sans,sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;background:none;color:var(--text3)}
     .auth-tab.active{background:var(--violet);color:#fff}
     .auth-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:22px;margin-bottom:16px}
     .auth-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--text3);font-size:11px}
@@ -305,7 +305,7 @@
     .auth-footer{text-align:center;font-size:12px;color:var(--text3);margin-top:16px}
     .auth-footer a{color:var(--violet3);text-decoration:none}
     .method-toggle{display:flex;gap:8px;margin-bottom:14px}
-    .method-btn{flex:1;padding:10px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+    .method-btn{flex:1;padding:10px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:13px;font-family:DM Sans,sans-serif;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
     .method-btn.active{border-color:var(--violet2);color:var(--violet2);background:rgba(124,92,191,.1)}
     .firebase-note{font-size:11px;color:var(--text3);text-align:center;margin-top:8px;line-height:1.5}
   </style>
@@ -364,32 +364,22 @@ window._signOut = async () => {
   await _supa.auth.signOut();
 };
 
-// ── Vérif session au chargement ──
-window.addEventListener('DOMContentLoaded', async () => {
-  setTimeout(async () => {
-    // Mode invité : pas de vérification session
-    if (localStorage.getItem('lv_guest') === '1') {
-      document.getElementById('screen-auth').classList.remove('active');
-      showScreen('lectures');
-      return;
-    }
-    try {
-      const { data: { session } } = await _supa.auth.getSession();
-      if (session) {
-        const { data: profile } = await _supa.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-        if (profile) {
-          localStorage.setItem('lv_username', profile.pseudo || 'Lecteur');
-          localStorage.setItem('lv_mycode', profile.code || DB.myCode());
-        }
-        document.getElementById('screen-auth').classList.remove('active');
-        showScreen('lectures');
+// Fast async session check (runs before DOM)
+(async function(){
+  if(localStorage.getItem('lv_guest')==='1'){window._guestMode=true;return;}
+  try{
+    var s=await _supa.auth.getSession();
+    if(s.data.session){
+      var p=await _supa.from('profiles').select('*').eq('id',s.data.session.user.id).maybeSingle();
+      if(p.data){
+        localStorage.setItem('lv_username',p.data.pseudo||'Lecteur');
+        localStorage.setItem('lv_mycode',p.data.code||'');
+        if(p.data.avatar)localStorage.setItem('lv_avatar',p.data.avatar);
       }
-      // sinon l'écran auth reste visible
-    } catch(e) {
-      console.warn('Session check error', e);
+      window._sessionReady=true;
     }
-  }, 200);
-});
+  }catch(e){console.warn(e);}
+})();
 </script>
 
 <!-- ═══ AUTH SCREEN ═══ -->
@@ -801,7 +791,7 @@ function renderBooks(){
   el.innerHTML=books.map(b=>`
     <div class="card book-card" onclick="openDetail('${b.id}')">
       <div class="book-cover" style="background:${bookColor(b.titre)}">
-        ${b.cover?`<img src="${b.cover}" onerror="this.style.display='none'">`:'📖'}
+        ${b.cover?`<img src="${b.cover}" onerror="this.remove()">`:'📖'}
       </div>
       <div class="book-info">
         <div class="book-title">${b.titre||'Sans titre'}</div>
@@ -809,7 +799,7 @@ function renderBooks(){
         <div class="book-meta">
           ${statusBadge(b.statut)}
           ${b.coup?'<span class="badge badge-coup">💖 Coup de cœur</span>':''}
-          ${b.note?`<span class="stars-display">${starsHTML(b.note)}</span>`:''}
+          ${b.note?'<span class="stars-display">'+starsHTML(b.note)+'</span>':''}
         </div>
       </div>
     </div>`).join('');
@@ -855,7 +845,7 @@ function renderDashboard(){
     `:`
     <div class="card" style="text-align:center;padding:18px;cursor:pointer;border-style:dashed" onclick="openGoalModal()">
       <div style="font-size:28px;margin-bottom:8px">🎯</div>
-      <div style="font-family:'Fraunces',serif;font-size:16px;color:var(--cream)">Définir un objectif annuel</div>
+      <div style="font-family:Fraunces,serif;font-size:16px;color:var(--cream)">Définir un objectif annuel</div>
       <div style="font-size:12px;color:var(--text3);margin-top:4px">Combien de livres souhaitez-vous lire cette année ?</div>
     </div>`}
 
@@ -866,8 +856,8 @@ function renderDashboard(){
       <div class="stat-card"><div class="stat-num">${coups.length}</div><div class="stat-label">💖 Coups de cœur</div></div>
     </div>
 
-    ${pages>0?`<div class="card" style="text-align:center;padding:16px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">📄 Pages lues</div><div style="font-family:'Fraunces',serif;font-size:38px;color:var(--violet2);margin-top:4px">${pages.toLocaleString('fr-FR')}</div></div>`:''}
-    ${favAut!=='—'?`<div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">✍️ Auteur favori</div><div style="font-family:'Fraunces',serif;font-size:18px;color:var(--cream)">${favAut}</div><div style="font-size:12px;color:var(--text3)">${auteurs[favAut]} livre${auteurs[favAut]>1?'s':''}</div></div>`:''}
+    ${pages>0?`<div class="card" style="text-align:center;padding:16px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">📄 Pages lues</div><div style="font-family:Fraunces,serif;font-size:38px;color:var(--violet2);margin-top:4px">${pages.toLocaleString('fr-FR')}</div></div>`:''}
+    ${favAut!=='—'?`<div class="card" style="padding:14px"><div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">✍️ Auteur favori</div><div style="font-family:Fraunces,serif;font-size:18px;color:var(--cream)">${favAut}</div><div style="font-size:12px;color:var(--text3)">${auteurs[favAut]} livre${auteurs[favAut]>1?'s':''}</div></div>`:''}
 
     <div class="section-title">📊 Genres</div>
     ${genreList.filter(g=>genres[g]).map(g=>`
@@ -876,7 +866,7 @@ function renderDashboard(){
         <div class="genre-track"><div class="genre-fill" style="width:${genres[g]/maxG*100}%"></div></div>
       </div>`).join('')}
     ${!Object.keys(genres).length?'<div style="color:var(--text3);font-size:13px;text-align:center;padding:16px">Aucune donnée pour l\'instant</div>':''}
-    ${goal.target&&goalPct>=100?`<div class="card" style="text-align:center;padding:20px;background:linear-gradient(135deg,rgba(92,196,138,.1),rgba(232,197,106,.1));border-color:rgba(232,197,106,.3)"><div style="font-size:36px;margin-bottom:8px">🏆</div><div style="font-family:'Fraunces',serif;font-size:18px;color:var(--gold2)">Objectif atteint !</div><div style="font-size:13px;color:var(--text3);margin-top:6px">Félicitations — vous avez lu ${lus.length} livre${lus.length>1?'s':''} cette année !</div></div>`:''}
+    ${goal.target&&goalPct>=100?`<div class="card" style="text-align:center;padding:20px;background:linear-gradient(135deg,rgba(92,196,138,.1),rgba(232,197,106,.1));border-color:rgba(232,197,106,.3)"><div style="font-size:36px;margin-bottom:8px">🏆</div><div style="font-family:Fraunces,serif;font-size:18px;color:var(--gold2)">Objectif atteint !</div><div style="font-size:13px;color:var(--text3);margin-top:6px">Félicitations — vous avez lu ${lus.length} livre${lus.length>1?'s':''} cette année !</div></div>`:''}
   `;
 }
 
@@ -911,7 +901,7 @@ function renderShelf(){
         <span class="spine-title">${b.titre}</span>
       </div>`;
     }).join(''):`<div class="shelf-empty">Aucun livre ici</div>`;
-    return`<div class="section-title">${label} <span style="font-size:12px;color:var(--text3);font-family:'DM Sans'">${list.length}</span></div>
+    return`<div class="section-title">${label} <span style="font-size:12px;color:var(--text3);font-family:DM Sans">${list.length}</span></div>
     <div class="shelf"><div class="shelf-books">${booksHTML}</div></div>`;
   }).join('');
 }
@@ -932,12 +922,12 @@ function renderSocial(){
 
   // Recos received
   if(recos.length){
-    html+=`<div class="section-title">💌 Recommandations reçues <span style="background:var(--rose);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-family:'DM Sans';font-weight:600">${recos.length}</span></div>`;
+    html+=`<div class="section-title">💌 Recommandations reçues <span style="background:var(--rose);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-family:DM Sans;font-weight:600">${recos.length}</span></div>`;
     html+=recos.map(r=>`
       <div class="reco-card">
         <div class="reco-from">💌 ${r.fromName} vous recommande :</div>
         <div class="reco-book">
-          <div class="reco-cover" style="background:${bookColor(r.book.titre)}">${r.book.cover?`<img src="${r.book.cover}" onerror="this.style.display='none'">`:'📖'}</div>
+          <div class="reco-cover" style="background:${bookColor(r.book.titre)}">${r.book.cover?`<img src="${r.book.cover}" onerror="this.remove()">`:'📖'}</div>
           <div class="reco-info">
             <div class="reco-title">${r.book.titre}</div>
             <div class="reco-author">${r.book.auteur||'—'}</div>
@@ -979,7 +969,7 @@ function renderSocial(){
           <div class="activity-text">${f.text}</div>
           <div class="activity-time">${f.time}</div>
           ${f.book?`<div class="activity-book-mini" onclick="openDetail('${f.book.id}')">
-            <div class="activity-book-mini-cover" style="background:${bookColor(f.book.titre)}">${f.book.cover?`<img src="${f.book.cover}" onerror="this.style.display='none'">`:'📖'}</div>
+            <div class="activity-book-mini-cover" style="background:${bookColor(f.book.titre)}">${f.book.cover?`<img src="${f.book.cover}" onerror="this.remove()">`:'📖'}</div>
             <div><div style="font-size:13px;color:var(--cream)">${f.book.titre}</div><div style="font-size:11px;color:var(--text3)">${f.book.auteur||''}</div></div>
           </div>`:''}
         </div>
@@ -1158,7 +1148,7 @@ function openDetail(id){
   detailBook=book;
   $id('detail-content').innerHTML=`
     <div class="detail-cover" style="background:${bookColor(book.titre)}">
-      ${book.cover?`<img src="${book.cover}" onerror="this.style.display='none'">`:'📖'}
+      ${book.cover?`<img src="${book.cover}" onerror="this.remove()">`:'📖'}
     </div>
     <div class="detail-title">${book.titre||'Sans titre'}</div>
     <div class="detail-author">${book.auteur||'Auteur inconnu'}</div>
@@ -1193,8 +1183,8 @@ function openRecoModal(book){
   recoBook=book;
   const friends=DB.friends();
   $id('reco-book-info').innerHTML=`<div style="display:flex;gap:12px;align-items:center;padding:12px;background:var(--bg3);border-radius:12px">
-    <div style="width:44px;height:64px;border-radius:7px;background:${bookColor(book.titre)};display:flex;align-items:center;justify-content:center;overflow:hidden">${book.cover?`<img src="${book.cover}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`:'📖'}</div>
-    <div><div style="font-family:'Fraunces',serif;color:var(--cream)">${book.titre}</div><div style="font-size:12px;color:var(--text2)">${book.auteur||''}</div></div>
+    <div style="width:44px;height:64px;border-radius:7px;background:${bookColor(book.titre)};display:flex;align-items:center;justify-content:center;overflow:hidden">${book.cover?`<img src="${book.cover}" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">`:'📖'}</div>
+    <div><div style="font-family:Fraunces,serif;color:var(--cream)">${book.titre}</div><div style="font-size:12px;color:var(--text2)">${book.auteur||''}</div></div>
   </div>`;
   $id('reco-msg').value='';
   $id('reco-friends-list').innerHTML=friends.map(f=>`
@@ -1310,16 +1300,14 @@ async function searchBooks(){
       year:  b.first_publish_year||'',
       resume:''  // sera chargé au clic
     }));
-    el.innerHTML = _searchResults.map((b,i)=>`
-      <div class="search-result" onclick="fillFromSearch(${i})" style="cursor:pointer">
-        <div class="search-result-cover">${b.cover?`<img src="${b.cover}" onerror="this.parentNode.innerHTML='📖'">`:'📖'}</div>
-        <div class="search-result-info">
-          <div class="search-result-title">${b.titre||'—'}</div>
-          <div class="search-result-author">${b.auteur||'Auteur inconnu'}</div>
-          <div style="font-size:11px;color:var(--text3)">${b.year}</div>
-        </div>
-        <button class="choose-btn" onclick="event.stopPropagation();fillFromSearch(${i})">Choisir</button>
-      </div>`).join('');
+    el.innerHTML = _searchResults.map((b,i)=>
+      '<div class="search-result" onclick="fillFromSearch('+i+')" style="cursor:pointer">'
+      +'<div class="search-result-cover">'+(b.cover?'<img src="'+b.cover+'" onerror="this.remove()">':'📖')+'</div>'
+      +'<div class="search-result-info"><div class="search-result-title">'+(b.titre||'—')+'</div>'
+      +'<div class="search-result-author">'+(b.auteur||'Auteur inconnu')+'</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+b.year+'</div></div>'
+      +'<button class="choose-btn" onclick="event.stopPropagation();fillFromSearch('+i+')">Choisir</button></div>'
+    ).join('');
   }catch(e){el.innerHTML='<div style="color:var(--rose);font-size:13px;padding:8px 0">Erreur de connexion</div>'}
 }
 

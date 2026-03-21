@@ -79,7 +79,12 @@
     .book-card{display:flex;gap:14px;align-items:flex-start;cursor:pointer;transition:transform .15s}
     .book-card:active{transform:scale(.97)}
     .book-cover{width:58px;height:88px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:26px;border:1px solid var(--border2);overflow:hidden;position:relative}
-    .book-cover img{width:100%;height:100%;object-fit:cover}
+    .book-cover img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .25s ease}
+    .book-cover img.loaded{opacity:1}
+    .search-result-cover img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s ease}
+    .search-result-cover img.loaded{opacity:1}
+    .detail-cover img{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .3s ease}
+    .detail-cover img.loaded{opacity:1}
     .book-info{flex:1;min-width:0}
     .book-title{font-family:Fraunces,serif;font-size:16px;font-weight:600;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .book-author{font-size:12px;color:var(--text2);margin-top:2px}
@@ -1259,11 +1264,7 @@ function renderProfil(){
     </div>
 
     <div class="section-title">🏆 Mes badges</div>
-    <div class="badges-grid">${badges.map(b=>`
-      <div class="badge-card ${b.unlocked?'unlocked':'locked'}">
-        <div class="badge-icon">${b.icon}</div>
-        <div class="badge-name">${b.name}</div>
-      </div>`).join('')}</div>
+    <div class="badges-grid">${badges.map((b,bi)=>'<div class="badge-card '+(b.unlocked?'unlocked':'locked')+'" onclick="openBadgeDetail('+bi+')" style="cursor:pointer">'+'<div class="badge-icon">'+b.icon+'</div>'+'<div class="badge-name">'+b.name+'</div>'+(b.unlocked?'<div style="font-size:9px;color:var(--teal);margin-top:3px">✅ Débloqué</div>':'<div style="font-size:9px;color:var(--text3);margin-top:3px">🔒 Verrouillé</div>')+'</div>').join('')}</div>
 
     <div class="section-title" style="justify-content:space-between">
       📖 Mes citations
@@ -1317,30 +1318,67 @@ function renderProfil(){
 }
 
 function computeBadges(lus,coups,quotes,friends){
-  const days = daysSinceJoin();
-  const sponsored = parseInt(localStorage.getItem('lv_sponsored')||'0');
+  const days=daysSinceJoin();
+  const sponsored=parseInt(localStorage.getItem('lv_sponsored')||'0');
+  const pg=lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0);
+  const gen=[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length;
+  const goal=DB.goal();
   return[
-    {icon:'📖',name:'Premier livre',     unlocked:lus.length>=1},
-    {icon:'📚',name:'5 livres lus',      unlocked:lus.length>=5},
-    {icon:'🏆',name:'10 livres lus',     unlocked:lus.length>=10},
-    {icon:'🌟',name:'20 livres lus',     unlocked:lus.length>=20},
-    {icon:'💖',name:'Coup de cœur',      unlocked:coups.length>=1},
-    {icon:'👥',name:'Premier ami',       unlocked:friends.length>=1},
-    {icon:'🤝',name:'5 amis',            unlocked:friends.length>=5},
-    {icon:'📣',name:'Ambassadeur',       unlocked:sponsored>=1,  desc:'A parrainé au moins 1 ami'},
-    {icon:'🌍',name:'Super Ambassadeur', unlocked:sponsored>=5,  desc:'A parrainé 5 amis ou plus'},
-    {icon:'📝',name:'Citateur',          unlocked:quotes.length>=1},
-    {icon:'⭐',name:'Critique',          unlocked:lus.filter(b=>b.note>=4).length>=3},
-    {icon:'🌍',name:'Explorateur',       unlocked:[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length>=4},
-    {icon:'🎯',name:'Objectif atteint',  unlocked:(()=>{const g=DB.goal();return g.target&&lus.length>=g.target;})()},
-    {icon:'📅',name:'1 semaine',         unlocked:days>=7},
-    {icon:'🗓️',name:'1 mois',            unlocked:days>=30},
-    {icon:'🏅',name:'3 mois',            unlocked:days>=90},
-    {icon:'🎂',name:'1 an',              unlocked:days>=365},
-    {icon:'📄',name:'1 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=1000},
-    {icon:'📰',name:'5 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=5000},
-    {icon:'🔗',name:'Profil partagé',    unlocked:!!localStorage.getItem('lv_profile_shared')},
+    {icon:'📖',name:'Premier livre',     unlocked:lus.length>=1,id:'first',   cond:'Marquer 1 livre comme Lu',              how:'Ajoutez un livre et passez son statut en Lu',                prog:lus.length+'/1'},
+    {icon:'📚',name:'5 livres lus',      unlocked:lus.length>=5,id:'five',    cond:'Marquer 5 livres comme Lus',             how:'Continuez à lire !',                                    prog:lus.length+'/5'},
+    {icon:'🏆',name:'10 livres lus',     unlocked:lus.length>=10,id:'ten',     cond:'Marquer 10 livres comme Lus',            how:'Continuez à lire !',                                    prog:lus.length+'/10'},
+    {icon:'🌟',name:'20 livres lus',     unlocked:lus.length>=20,id:'twenty',  cond:'Marquer 20 livres comme Lus',            how:'Continuez à lire !',                                    prog:lus.length+'/20'},
+    {icon:'💖',name:'Coup de cœur',      unlocked:coups.length>=1,id:'coup',    cond:'Marquer 1 livre Coup de cœur',      how:'Modifiez un livre et activez le ♥ Oui',                  prog:coups.length+'/1'},
+    {icon:'👥',name:'Premier ami',       unlocked:friends.length>=1,id:'friend',  cond:'Ajouter 1 ami',                          how:'Onglet Amis → Ajouter un ami',                          prog:friends.length+'/1'},
+    {icon:'🤝',name:'5 amis',            unlocked:friends.length>=5,id:'friends5',cond:'Avoir 5 amis',                           how:'Partagez votre code d’invitation',                      prog:friends.length+'/5'},
+    {icon:'📣',name:'Ambassadeur',       unlocked:sponsored>=1,  desc:'A parrainé au moins 1 ami',id:'ambass',  cond:'Parrainer 1 ami',                        how:'Votre ami entre votre code pour vous ajouter',               prog:sponsored+'/1'},
+    {icon:'🌍',name:'Super Ambassadeur', unlocked:sponsored>=5,  desc:'A parrainé 5 amis ou plus',id:'super',   cond:'Parrainer 5 amis',                       how:'Partagez votre code au maximum',                             prog:sponsored+'/5'},
+    {icon:'📝',name:'Citateur',          unlocked:quotes.length>=1,id:'quote',   cond:'Sauvegarder 1 citation',                 how:'Profil → Citations → + Ajouter',                   prog:quotes.length+'/1'},
+    {icon:'⭐',name:'Critique',          unlocked:lus.filter(b=>b.note>=4).length>=3,id:'critic',  cond:'3 livres notés 4+ étoiles',    how:'Notez vos livres avec 4 ou 5 étoiles',                   prog:lus.filter(b=>b.note>=4).length+'/3'},
+    {icon:'🌍',name:'Explorateur',       unlocked:[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length>=4,id:'explorer',cond:'Lire dans 4 genres différents',     how:'Ajoutez des livres de genres variés',                    prog:gen+'/4'},
+    {icon:'🎯',name:'Objectif atteint',  unlocked:(()=>{const g=DB.goal();return g.target&&lus.length>=g.target;})(),id:'goal',    cond:'Atteindre votre objectif annuel',        how:'Stats → Définir un objectif et le compléter', prog:lus.length+'/'+(goal.target||'?')},
+    {icon:'📅',name:'1 semaine',         unlocked:days>=7,id:'week',    cond:'7 jours sur Livroo',                     how:'Revenez chaque jour !',                                       prog:Math.min(days,7)+'/7 j'},
+    {icon:'🗓️',name:'1 mois',            unlocked:days>=30,id:'month',   cond:'30 jours sur Livroo',                    how:'Fidélité récompensée !',                  prog:Math.min(days,30)+'/30 j'},
+    {icon:'🏅',name:'3 mois',            unlocked:days>=90,id:'months3', cond:'90 jours sur Livroo',                    how:'Vous êtes un pilier de la communauté !',             prog:Math.min(days,90)+'/90 j'},
+    {icon:'🎂',name:'1 an',              unlocked:days>=365,id:'year',    cond:'365 jours sur Livroo',                   how:'Légende Livroo !',                                       prog:Math.min(days,365)+'/365 j'},
+    {icon:'📄',name:'1 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=1000,id:'p1000',   cond:'Lire 1 000 pages au total',              how:'Renseignez les pages de vos livres lus',                      prog:pg+'/1000'},
+    {icon:'📰',name:'5 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=5000,id:'p5000',   cond:'Lire 5 000 pages au total',              how:'Continuez à lire !',                                    prog:pg+'/5000'},
+    {icon:'🔗',name:'Profil partagé',    unlocked:!!localStorage.getItem('lv_profile_shared'),id:'share',   cond:'Partager son profil public',             how:'Profil → Mon profil public → Partager',             prog:localStorage.getItem('lv_profile_shared')?'Fait':'À faire'},
   ];
+}
+
+
+// Badge detail modal
+function openBadgeDetail(idx){
+  var lus=DB.books().filter(function(b){return b.statut==='Lu';});
+  var coups=DB.books().filter(function(b){return b.coup;});
+  var badges=computeBadges(lus,coups,DB.quotes(),DB.friends());
+  var b=badges[idx]; if(!b)return;
+  var dates=DB.get('lv_badge_dates',{});
+  var ds=dates[b.id]?(' le '+new Date(dates[b.id]).toLocaleDateString('fr-FR')):'';
+  var sc=b.unlocked?'var(--gold2)':'var(--text3)';
+  var st=b.unlocked?'✅ Débloqué'+ds:'🔒 Pas encore débloqué';
+  var html='<div style="font-size:52px;margin-bottom:10px;'+(b.unlocked?'':'filter:grayscale(1);opacity:.4')+'">'+b.icon+'</div>'
+    +'<div style="font-family:Fraunces,serif;font-size:20px;color:var(--cream);margin-bottom:6px">'+b.name+'</div>'
+    +'<div style="font-size:13px;color:'+sc+';font-weight:600;margin-bottom:16px">'+st+'</div>'
+    +'<div style="background:var(--bg3);border-radius:12px;padding:14px;text-align:left;margin-bottom:10px">'
+    +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Condition</div>'
+    +'<div style="font-size:13px;color:var(--text)">'+(b.cond||b.name)+'</div></div>';
+  if(!b.unlocked&&b.how){
+    html+='<div style="background:var(--bg3);border-radius:12px;padding:14px;text-align:left;margin-bottom:10px">'
+      +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Comment l’obtenir</div>'
+      +'<div style="font-size:13px;color:var(--text)">'+b.how+'</div></div>';
+  }
+  html+='<div style="background:var(--bg3);border-radius:12px;padding:14px;text-align:left">'
+    +'<div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Progression</div>'
+    +'<div style="font-size:17px;color:'+(b.unlocked?'var(--teal)':'var(--violet2)')+';font-family:Fraunces,serif;font-weight:600">'+(b.prog||'—')+'</div></div>';
+  document.getElementById('badge-detail-content').innerHTML=html;
+  document.getElementById('modal-badge').classList.add('open');
+}
+function saveBadgeDates(badges){
+  var dates=DB.get('lv_badge_dates',{});var upd=false;
+  badges.forEach(function(b){if(b.unlocked&&b.id&&!dates[b.id]){dates[b.id]=new Date().toISOString();upd=true;}});
+  if(upd)DB.set('lv_badge_dates',dates);
 }
 
 // Track sponsored friends (incremented when a friend uses your code)
@@ -1475,8 +1513,17 @@ function openEdit(b){
 function updateStars(n){note=n;document.querySelectorAll('.star-btn').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.v)<=n))}
 function updateCoup(v){
   isCoup=v;
-  $id('coup-yes').style.background=v?'linear-gradient(135deg,rgba(232,124,138,.4),rgba(232,197,106,.3))':'';
-  $id('coup-no').style.background=!v?'var(--bg3)':'';
+  var yes=$id('coup-yes'), no=$id('coup-no');
+  // Active state for YES
+  yes.style.background = v ? 'linear-gradient(135deg,rgba(232,124,138,.4),rgba(232,197,106,.3))' : '';
+  yes.style.borderColor = v ? 'rgba(232,197,106,.5)' : '';
+  yes.style.color = v ? 'var(--gold2)' : '';
+  yes.style.fontWeight = v ? '600' : '';
+  // Active state for NON
+  no.style.background = !v ? 'rgba(92,196,176,.12)' : '';
+  no.style.borderColor = !v ? 'rgba(92,196,176,.3)' : '';
+  no.style.color = !v ? 'var(--teal)' : '';
+  no.style.fontWeight = !v ? '600' : '';
 }
 
 document.querySelectorAll('.star-btn').forEach(b=>b.addEventListener('click',()=>updateStars(parseInt(b.dataset.v))));
@@ -1515,34 +1562,90 @@ $id('btn-delete').addEventListener('click',()=>{
 $id('search-api-btn').addEventListener('click',searchBooks);
 $id('search-api').addEventListener('keydown',e=>{if(e.key==='Enter')searchBooks()});
 
+
+// Map Google Books categories -> our genre list
+function mapGenre(categories) {
+  if(!categories || !categories.length) return '';
+  var cat = (categories[0] || '').toLowerCase();
+  if(cat.includes('thriller') || cat.includes('suspense')) return 'Thriller';
+  if(cat.includes('crime') || cat.includes('detective') || cat.includes('mystery')) return 'Policier';
+  if(cat.includes('noir') || cat.includes('dark')) return 'Roman noir';
+  if(cat.includes('romance') || cat.includes('love') || cat.includes('amour')) return 'Romance';
+  if(cat.includes('horror') || cat.includes('horreur')) return 'Horreur';
+  if(cat.includes('fantasy') || cat.includes('fantastique')) return 'Fantasy';
+  if(cat.includes('science fiction') || cat.includes('sci-fi') || cat.includes('sf')) return 'Sci-Fi';
+  if(cat.includes('biograph') || cat.includes('memoir') || cat.includes('autobiograph')) return 'Biographie';
+  if(cat.includes('self-help') || cat.includes('personal development') || cat.includes('développement')) return 'Développement personnel';
+  if(cat.includes('essay') || cat.includes('essai') || cat.includes('philosophy')) return 'Essai';
+  if(cat.includes('manga')) return 'Manga';
+  if(cat.includes('comic') || cat.includes('graphic') || cat.includes('bd')) return 'BD';
+  if(cat.includes('fiction') || cat.includes('novel') || cat.includes('roman')) return 'Roman';
+  return '';
+}
+
 let _searchResults = [];
 
 async function searchBooks(){
-  const q=$id('search-api').value.trim();if(!q)return;
+  const q=$id('search-api').value.trim(); if(!q) return;
   const el=$id('api-results');
   el.innerHTML='<div class="loading"><div class="spinner"></div>Recherche en cours…</div>';
   try{
-    const res=await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=6&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i,subject,language`);
-    const data=await res.json();
-    if(!data.docs?.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun résultat trouvé</div>';return;}
-    _searchResults = data.docs.map(b=>({
-      key:   b.key||'',
-      titre: b.title||'',
-      auteur:(b.author_name||[])[0]||'',
-      pages: b.number_of_pages_median||'',
-      editeur:(b.publisher||[])[0]||'',
-      cover: b.cover_i?`https://covers.openlibrary.org/b/id/${b.cover_i}-M.jpg`:'',
-      year:  b.first_publish_year||'',
-      resume:''  // sera chargé au clic
-    }));
-    el.innerHTML = _searchResults.map((b,i)=>
-      '<div class="search-result" onclick="fillFromSearch('+i+')" style="cursor:pointer">'
-      +'<div class="search-result-cover">'+(b.cover?'<img src="'+b.cover+'" onerror="this.remove()">':'📖')+'</div>'
-      +'<div class="search-result-info"><div class="search-result-title">'+(b.titre||'—')+'</div>'
-      +'<div class="search-result-author">'+(b.auteur||'Auteur inconnu')+'</div>'
-      +'<div style="font-size:11px;color:var(--text3)">'+b.year+'</div></div>'
-      +'<button class="choose-btn" onclick="event.stopPropagation();fillFromSearch('+i+')">Choisir</button></div>'
-    ).join('');
+    // Fetch Google Books + Open Library in parallel
+    const [gbRes, olRes] = await Promise.allSettled([
+      fetch('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(q)+'&langRestrict=fr&maxResults=4&printType=books'),
+      fetch('https://openlibrary.org/search.json?q='+encodeURIComponent(q)+'&limit=3&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i')
+    ]);
+    const results = [];
+    // Google Books (has categories for genre detection)
+    if(gbRes.status==='fulfilled'){
+      const gb = await gbRes.value.json();
+      (gb.items||[]).forEach(function(item){
+        const info = item.volumeInfo||{};
+        results.push({
+          key:     null,
+          titre:   info.title||'',
+          auteur:  (info.authors||[])[0]||'',
+          pages:   info.pageCount||'',
+          editeur: info.publisher||'',
+          cover:   (info.imageLinks ? (info.imageLinks.thumbnail||'') : '').replace('http:','https:').replace('zoom=1','zoom=2'),
+          year:    (info.publishedDate||'').substring(0,4),
+          resume:  (info.description||'').replace(/<[^>]+>/g,'').substring(0,800),
+          genre:   mapGenre(info.categories),
+          source:  'gb'
+        });
+      });
+    }
+    // Open Library
+    if(olRes.status==='fulfilled'){
+      const ol = await olRes.value.json();
+      (ol.docs||[]).forEach(function(b){
+        if(results.length>=7) return;
+        results.push({
+          key:     b.key||'',
+          titre:   b.title||'',
+          auteur:  (b.author_name||[])[0]||'',
+          pages:   b.number_of_pages_median||'',
+          editeur: (b.publisher||[])[0]||'',
+          cover:   b.cover_i?'https://covers.openlibrary.org/b/id/'+b.cover_i+'-M.jpg':'',
+          year:    b.first_publish_year||'',
+          resume:  '',
+          genre:   '',
+          source:  'ol'
+        });
+      });
+    }
+    if(!results.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun résultat trouvé</div>';return;}
+    _searchResults = results;
+    el.innerHTML = results.map(function(b,i){
+      var genreTag = b.genre ? '<span style="font-size:10px;color:var(--teal);background:rgba(92,196,176,.12);padding:2px 7px;border-radius:8px;margin-top:2px;display:inline-block">' + b.genre + '</span>' : '';
+      return '<div class="search-result" onclick="fillFromSearch('+i+')" style="cursor:pointer">'
+        +'<div class="search-result-cover">'+(b.cover?'<img src="'+b.cover+'" onerror="this.remove()">':'📖')+'</div>'
+        +'<div class="search-result-info"><div class="search-result-title">'+(b.titre||'—')+'</div>'
+        +'<div class="search-result-author">'+(b.auteur||'Auteur inconnu')+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+b.year+'</div>'
+        +genreTag+'</div>'
+        +'<button class="choose-btn" onclick="event.stopPropagation();fillFromSearch('+i+')">Choisir</button></div>';
+    }).join('');
   }catch(e){el.innerHTML='<div style="color:var(--rose);font-size:13px;padding:8px 0">Erreur de connexion</div>'}
 }
 
@@ -1551,45 +1654,61 @@ async function fillFromSearch(index){
   if(!book) return;
 
   // Remplir immédiatement les champs connus
-  $id('f-titre').value  = book.titre||'';
-  $id('f-auteur').value = book.auteur||'';
-  $id('f-pages').value  = book.pages||'';
-  $id('f-editeur').value= book.editeur||'';
-  $id('f-cover').value  = book.cover||'';
-  $id('search-api').value='';
-  $id('api-results').innerHTML='<div class="loading"><div class="spinner"></div>Récupération du résumé…</div>';
+  $id('f-titre').value   = book.titre||'';
+  $id('f-auteur').value  = book.auteur||'';
+  $id('f-pages').value   = book.pages||'';
+  $id('f-editeur').value = book.editeur||'';
+  $id('f-cover').value   = book.cover||'';
+  $id('search-api').value = '';
 
-  // Charger le résumé depuis l'API Works d'Open Library
+  // Genre auto-detected
+  if(book.genre) {
+    const sel = $id('f-genre');
+    // Try to match our list
+    for(let i=0;i<sel.options.length;i++){
+      if(sel.options[i].value===book.genre){ sel.selectedIndex=i; break; }
+    }
+  }
+
+  // Google Books already has resume
+  if(book.resume) {
+    $id('f-resume').value = book.resume;
+    $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations et résumé récupérés !</div>';
+    setTimeout(()=>$id('f-titre').scrollIntoView({behavior:'smooth',block:'center'}), 100);
+    return;
+  }
+
+  // Open Library: fetch resume from Works API
+  $id('api-results').innerHTML='<div class="loading"><div class="spinner"></div>Récupération du résumé…</div>';
   try{
     if(book.key){
-      const workRes = await fetch(`https://openlibrary.org${book.key}.json`);
+      const workRes = await fetch('https://openlibrary.org'+book.key+'.json');
       const workData = await workRes.json();
-
-      // Résumé
       let resume = '';
       if(workData.description){
-        resume = typeof workData.description === 'string'
-          ? workData.description
-          : workData.description.value || '';
+        resume = typeof workData.description==='string' ? workData.description : workData.description.value||'';
       } else if(workData.notes){
-        resume = typeof workData.notes === 'string' ? workData.notes : workData.notes.value||'';
+        resume = typeof workData.notes==='string' ? workData.notes : workData.notes.value||'';
       }
-      // Nettoyer le résumé (enlever les liens Markdown)
+      // Also try to get genre from subjects
+      if(!book.genre && workData.subjects && workData.subjects.length){
+        const detected = mapGenre([workData.subjects[0]]);
+        if(detected){
+          const sel=$id('f-genre');
+          for(let i=0;i<sel.options.length;i++){
+            if(sel.options[i].value===detected){sel.selectedIndex=i;break;}
+          }
+        }
+      }
       resume = resume.replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/\r?\n/g,' ').trim();
-      if(resume.length > 800) resume = resume.substring(0,800)+'…';
-      if(resume) $id('f-resume').value = resume;
-
-      // Nombre de pages depuis l'édition si manquant
-      if(!book.pages && workData.number_of_pages){
-        $id('f-pages').value = workData.number_of_pages;
-      }
+      if(resume.length>800) resume=resume.substring(0,800)+'…';
+      if(resume) $id('f-resume').value=resume;
+      if(!book.pages&&workData.number_of_pages) $id('f-pages').value=workData.number_of_pages;
     }
-    $id('api-results').innerHTML=`<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations récupérées${$id('f-resume').value?' avec résumé':''} !</div>`;
+    $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations récupérées'+($id('f-resume').value?' avec résumé':'')+' !</div>';
   }catch(e){
     $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations de base récupérées</div>';
   }
-
-  // Scroll vers le titre
   setTimeout(()=>$id('f-titre').scrollIntoView({behavior:'smooth',block:'center'}), 100);
 }
 
@@ -1795,6 +1914,7 @@ function checkBadgesIfNeeded() {
   if(!newOnes.length) return;
   const updated = [...seen, ...newOnes.map(b=>b.name)];
   DB.set('lv_seen_badges', updated);
+  saveBadgeDates(all);
   let delay = 0;
   newOnes.forEach(b => {
     setTimeout(() => showBadgeNotif(b), delay);
@@ -1953,10 +2073,10 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 // Notification locale (in-app + système si permission accordée)
-function sendLocalNotif(title, body, icon) {
+function sendLocalNotif(title, body, icon, targetScreen) {
   icon = icon || '📚';
   // Notification in-app (toujours visible)
-  showInAppNotif(title, body, icon);
+  showInAppNotif(title, body, icon, targetScreen);
   // Notification système si permission accordée
   if(Notification.permission === 'granted' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(function(reg) {
@@ -1966,34 +2086,40 @@ function sendLocalNotif(title, body, icon) {
         badge: 'icon-192.png',
         vibrate: [200, 100, 200],
         tag: 'livroo-notif',
-        data: { url: window.location.href }
+        data: { url: window.location.href, screen: targetScreen || 'social' }
       });
     });
   }
 }
 
 // Notification visuelle in-app (barre en haut)
-function showInAppNotif(title, body, icon) {
-  let n = document.getElementById('inapp-notif');
+function showInAppNotif(title, body, icon, targetScreen) {
+  var n = document.getElementById('inapp-notif');
   if(!n) {
     n = document.createElement('div');
     n.id = 'inapp-notif';
-    n.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:600;background:var(--bg2);border-bottom:1px solid var(--border2);padding:12px 16px calc(12px + env(safe-area-inset-top,0px)) 16px;display:none;animation:slideDown .3s ease;cursor:pointer;backdrop-filter:blur(20px)';
-    n.innerHTML = '<div style="display:flex;align-items:center;gap:12px"><div id="ian-icon" style="font-size:24px;flex-shrink:0"></div><div><div id="ian-title" style="font-size:13px;color:var(--cream);font-weight:600"></div><div id="ian-body" style="font-size:11px;color:var(--text2);margin-top:2px"></div></div><button style="margin-left:auto;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer" onclick="document.getElementById(\'inapp-notif\').style.display=\'none\'">✕</button></div>';
-    n.onclick = function(e) { if(e.target.tagName !== 'BUTTON') n.style.display='none'; };
+    n.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:600;background:var(--bg2);border-bottom:1px solid var(--border2);padding:12px 16px calc(12px + env(safe-area-inset-top,0px)) 16px;display:none;backdrop-filter:blur(20px)';
+    n.innerHTML = '<div style="display:flex;align-items:center;gap:12px">'
+      + '<div id="ian-icon" style="font-size:24px;flex-shrink:0"></div>'
+      + '<div style="flex:1" id="ian-wrap"><div id="ian-title" style="font-size:13px;color:var(--cream);font-weight:600"></div>'
+      + '<div id="ian-body" style="font-size:11px;color:var(--text2);margin-top:2px"></div>'
+      + '<div id="ian-hint" style="font-size:10px;color:var(--violet3);margin-top:3px;display:none">Appuyer pour voir &#8594;</div></div>'
+      + '<button id="ian-x" style="margin-left:8px;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">&#x2715;</button></div>';
     document.body.appendChild(n);
-    // Add animation
-    var style = document.createElement('style');
-    style.textContent = '@keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}';
-    document.head.appendChild(style);
+    document.getElementById('ian-x').addEventListener('click',function(e){e.stopPropagation();n.style.display='none';});
+    if(!document.getElementById('ian-css')){var cs=document.createElement('style');cs.id='ian-css';cs.textContent='@keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}';document.head.appendChild(cs);}
   }
   document.getElementById('ian-icon').textContent  = icon || '📚';
   document.getElementById('ian-title').textContent = title;
   document.getElementById('ian-body').textContent  = body;
-  n.style.display = 'block';
-  setTimeout(function() { if(n) n.style.display='none'; }, 5000);
+  var hint=document.getElementById('ian-hint'), wrap=document.getElementById('ian-wrap');
+  n._screen = targetScreen || null;
+  if(targetScreen){ hint.style.display='block'; n.style.cursor='pointer'; wrap.onclick=function(){n.style.display='none';showScreen(targetScreen);}; }
+  else { hint.style.display='none'; n.style.cursor='default'; wrap.onclick=null; }
+  n.style.display='block'; n.style.animation='slideDown .3s ease';
+  if(n._t) clearTimeout(n._t);
+  n._t=setTimeout(function(){n.style.display='none';},6000);
 }
-
 // ── Vérifications périodiques (au lancement de l'app) ──
 async function checkAllNotifications() {
   const uid = localStorage.getItem('lv_uid');
@@ -2088,6 +2214,28 @@ async function setupNotifications() {
     toast('\u274C Notifications refus\u00e9es — activez-les dans les r\u00e9glages');
   }
 }
+
+// Image lazy loader — adds .loaded on onload
+function imgLoad(img) {
+  if(!img) return;
+  if(img.complete && img.naturalWidth) { img.classList.add('loaded'); return; }
+  img.addEventListener('load', function(){ img.classList.add('loaded'); });
+  img.addEventListener('error', function(){ img.remove(); });
+}
+// Apply to all images currently in DOM and to future mutations
+function initImgLoaders() {
+  document.querySelectorAll('img').forEach(imgLoad);
+}
+// MutationObserver to auto-apply on newly added images
+var _imgObserver = new MutationObserver(function(mutations) {
+  mutations.forEach(function(m) {
+    m.addedNodes.forEach(function(node) {
+      if(node.tagName === 'IMG') { imgLoad(node); }
+      else if(node.querySelectorAll) { node.querySelectorAll('img').forEach(imgLoad); }
+    });
+  });
+});
+_imgObserver.observe(document.body, { childList: true, subtree: true });
 
 // ════════════════════════════════════════════
 // SERVICE WORKER

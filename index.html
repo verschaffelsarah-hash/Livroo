@@ -1056,7 +1056,9 @@ $id('add-friend-confirm').addEventListener('click',()=>{
   $id('friend-code-input').value='';
   $id('friend-name-input').value='';
   $id('modal-add-friend').classList.remove('open');
+  recordSponsor();
   toast(`✅ ${name} ajouté(e) !`);
+  checkBadgesIfNeeded();
   renderSocial();
 });
 
@@ -1104,22 +1106,75 @@ function renderProfil(){
         </div>
       </div>`).join(''):`
     <div class="empty"><div class="empty-icon">📝</div><div class="empty-title">Aucune citation</div><div class="empty-sub">Ajoutez vos phrases préférées ici</div></div>`}
-    <button class="btn btn-danger" style="width:100%;margin-top:20px" onclick="doLogout()">🚪 Se déconnecter</button>
+    <div class="section-title">🔗 Mon profil public</div>
+    <div class="card" style="padding:16px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">Partagez votre bibliothèque avec vos amis et sur les réseaux — ils pourront découvrir vos coups de cœur et rejoindre Livroo !</div>
+      <div class="btn-row" style="margin-top:0">
+        <button class="btn btn-primary" onclick="generatePublicProfile()">👁️ Voir mon profil</button>
+        <button class="btn btn-secondary" onclick="sharePublicProfile()">📤 Partager</button>
+      </div>
+    </div>
+
+    <div class="section-title">📣 Programme Ambassadeur</div>
+    <div class="card" style="padding:16px;background:linear-gradient(135deg,rgba(232,197,106,.08),rgba(124,92,191,.08));border-color:rgba(232,197,106,.2)">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+        <div style="font-size:36px">${parseInt(localStorage.getItem('lv_sponsored')||'0')>=5?'🌍':parseInt(localStorage.getItem('lv_sponsored')||'0')>=1?'📣':'🤝'}</div>
+        <div>
+          <div style="font-family:Fraunces,serif;font-size:16px;color:var(--cream)">${parseInt(localStorage.getItem('lv_sponsored')||'0')>=5?'Super Ambassadeur !':parseInt(localStorage.getItem('lv_sponsored')||'0')>=1?'Ambassadeur Livroo':'Devenez Ambassadeur'}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:3px">${parseInt(localStorage.getItem('lv_sponsored')||'0')} ami${parseInt(localStorage.getItem('lv_sponsored')||'0')>1?'s':''} parrainé${parseInt(localStorage.getItem('lv_sponsored')||'0')>1?'s':''}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px">Parrainez des amis avec votre code <strong style="color:var(--violet3)">${DB.myCode()}</strong> — débloquez les badges Ambassadeur et Super Ambassadeur !</div>
+      <div style="display:flex;gap:6px">
+        <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:3px;width:${Math.min(100,parseInt(localStorage.getItem('lv_sponsored')||'0')/5*100)}%;transition:width .8s ease"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text3)">${parseInt(localStorage.getItem('lv_sponsored')||'0')}/5</div>
+      </div>
+      <button class="btn btn-gold" style="width:100%;margin-top:12px" onclick="shareInviteCode()">🎁 Partager mon code d\'invitation</button>
+    </div>
+    <button class="btn btn-danger" style="width:100%;margin-top:18px" onclick="doLogout()">🚪 Se déconnecter</button>
   `;
 }
 
 function computeBadges(lus,coups,quotes,friends){
+  const days = daysSinceJoin();
+  const sponsored = parseInt(localStorage.getItem('lv_sponsored')||'0');
   return[
-    {icon:'📖',name:'Premier livre',unlocked:lus.length>=1},
-    {icon:'📚',name:'5 livres lus',unlocked:lus.length>=5},
-    {icon:'🏆',name:'10 livres lus',unlocked:lus.length>=10},
-    {icon:'💖',name:'Coup de cœur',unlocked:coups.length>=1},
-    {icon:'👥',name:'Premier ami',unlocked:friends.length>=1},
-    {icon:'📝',name:'Lecteur citateur',unlocked:quotes.length>=1},
-    {icon:'⭐',name:'Critique',unlocked:lus.filter(b=>b.note>=4).length>=3},
-    {icon:'🌟',name:'Explorateur',unlocked:[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length>=4},
-    {icon:'🎯',name:'Objectif atteint',unlocked:()=>{const g=DB.goal();return g.target&&lus.length>=g.target}},
-  ].map(b=>({...b,unlocked:typeof b.unlocked==='function'?b.unlocked():b.unlocked}));
+    {icon:'📖',name:'Premier livre',     unlocked:lus.length>=1},
+    {icon:'📚',name:'5 livres lus',      unlocked:lus.length>=5},
+    {icon:'🏆',name:'10 livres lus',     unlocked:lus.length>=10},
+    {icon:'🌟',name:'20 livres lus',     unlocked:lus.length>=20},
+    {icon:'💖',name:'Coup de cœur',      unlocked:coups.length>=1},
+    {icon:'👥',name:'Premier ami',       unlocked:friends.length>=1},
+    {icon:'🤝',name:'5 amis',            unlocked:friends.length>=5},
+    {icon:'📣',name:'Ambassadeur',       unlocked:sponsored>=1,  desc:'A parrainé au moins 1 ami'},
+    {icon:'🌍',name:'Super Ambassadeur', unlocked:sponsored>=5,  desc:'A parrainé 5 amis ou plus'},
+    {icon:'📝',name:'Citateur',          unlocked:quotes.length>=1},
+    {icon:'⭐',name:'Critique',          unlocked:lus.filter(b=>b.note>=4).length>=3},
+    {icon:'🌍',name:'Explorateur',       unlocked:[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length>=4},
+    {icon:'🎯',name:'Objectif atteint',  unlocked:(()=>{const g=DB.goal();return g.target&&lus.length>=g.target;})()},
+    {icon:'📅',name:'1 semaine',         unlocked:days>=7},
+    {icon:'🗓️',name:'1 mois',            unlocked:days>=30},
+    {icon:'🏅',name:'3 mois',            unlocked:days>=90},
+    {icon:'🎂',name:'1 an',              unlocked:days>=365},
+    {icon:'📄',name:'1 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=1000},
+    {icon:'📰',name:'5 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=5000},
+    {icon:'🔗',name:'Profil partagé',    unlocked:!!localStorage.getItem('lv_profile_shared')},
+  ];
+}
+
+// Track sponsored friends (incremented when a friend uses your code)
+function recordSponsor() {
+  const n = parseInt(localStorage.getItem('lv_sponsored')||'0') + 1;
+  localStorage.setItem('lv_sponsored', n.toString());
+  checkBadgesIfNeeded();
+}
+
+function daysSinceJoin() {
+  let v = localStorage.getItem('lv_joined_at');
+  if(!v){ v = Date.now().toString(); localStorage.setItem('lv_joined_at',v); }
+  return Math.floor((Date.now()-parseInt(v))/86400000);
 }
 
 function deleteQuote(i){
@@ -1534,6 +1589,144 @@ async function doLogout() {
     $id('screen-auth').classList.add('active');
     switchAuthTab('signup');
   } catch(e) { toast('Erreur de déconnexion'); }
+}
+
+function shareInviteCode() {
+  const code = DB.myCode();
+  const msg  = 'Rejoins-moi sur Livroo, l\'app pour suivre tes lectures ! Mon code d\'invitation : ' + code + ' 📚';
+  if(navigator.share) {
+    navigator.share({title:'Rejoins Livroo !', text:msg, url:window.location.href}).catch(()=>{});
+  } else {
+    navigator.clipboard?.writeText(msg).then(()=>toast('📋 Message copié !'));
+  }
+}
+
+// ════════════════════════════════════════════
+// BADGE NOTIFICATIONS
+// ════════════════════════════════════════════
+function checkBadgesIfNeeded() {
+  const books  = DB.books();
+  const lus    = books.filter(b=>b.statut==='Lu');
+  const coups  = books.filter(b=>b.coup);
+  const quotes = DB.quotes();
+  const friends= DB.friends();
+  const all    = computeBadges(lus,coups,quotes,friends);
+  const seen   = DB.get('lv_seen_badges',[]);
+  const newOnes= all.filter(b=>b.unlocked && !seen.includes(b.name));
+  if(!newOnes.length) return;
+  const updated = [...seen, ...newOnes.map(b=>b.name)];
+  DB.set('lv_seen_badges', updated);
+  let delay = 0;
+  newOnes.forEach(b => {
+    setTimeout(() => showBadgeNotif(b), delay);
+    delay += 3400;
+  });
+}
+
+function showBadgeNotif(badge) {
+  // Create notif element if not present
+  let n = $id('badge-notif');
+  if(!n) {
+    n = document.createElement('div');
+    n.id = 'badge-notif';
+    n.style.cssText = 'position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,rgba(232,197,106,.97),rgba(124,92,191,.97));padding:14px 20px calc(14px + env(safe-area-inset-top,0px)) 20px;z-index:500;display:none;text-align:center;backdrop-filter:blur(10px);cursor:pointer';
+    n.innerHTML = '<span id="bni" style="font-size:32px;display:block;margin-bottom:4px"></span><div id="bnt" style="font-family:Fraunces,serif;font-size:16px;color:#fff;font-weight:700"></div><div id="bns" style="font-size:12px;color:rgba(255,255,255,.85);margin-top:3px"></div>';
+    n.onclick = () => n.style.display = 'none';
+    document.body.appendChild(n);
+  }
+  n.querySelector('#bni').textContent = badge.icon;
+  n.querySelector('#bnt').textContent = '🏆 Badge débloqué : ' + badge.name;
+  n.querySelector('#bns').textContent = badge.desc || badge.name;
+  n.style.display = 'block';
+  // Animate in
+  n.style.transform = 'translateY(-100%)';
+  n.style.transition = 'transform .4s cubic-bezier(.34,1.56,.64,1)';
+  requestAnimationFrame(() => requestAnimationFrame(() => n.style.transform = 'translateY(0)'));
+  setTimeout(() => {
+    n.style.transform = 'translateY(-100%)';
+    setTimeout(() => n.style.display='none', 400);
+  }, 3000);
+}
+
+// ════════════════════════════════════════════
+// PROFIL PUBLIC
+// ════════════════════════════════════════════
+function generatePublicProfile() {
+  const books  = DB.books();
+  const lus    = books.filter(b=>b.statut==='Lu');
+  const coups  = books.filter(b=>b.coup);
+  const badges = computeBadges(lus,coups,DB.quotes(),DB.friends()).filter(b=>b.unlocked);
+  const pages  = lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0);
+  const avg    = lus.filter(b=>b.note).length
+    ? (lus.filter(b=>b.note).reduce((s,b)=>s+b.note,0)/lus.filter(b=>b.note).length).toFixed(1)
+    : '—';
+
+  // Build shareable HTML card as data URL
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta property="og:title" content="${DB.userName()} sur Livroo">
+  <meta property="og:description" content="${lus.length} livres lus · ${pages.toLocaleString('fr-FR')} pages · Note moyenne ${avg}">
+  <title>${DB.userName()} — Livroo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:linear-gradient(135deg,#0d0d1a 0%,#1a1040 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:"DM Sans",sans-serif;padding:20px}
+    .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:32px 28px;max-width:420px;width:100%;text-align:center}
+    .logo{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:3px;text-transform:uppercase;margin-bottom:20px}
+    .avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#7c5cbf,#e87c8a);display:flex;align-items:center;justify-content:center;font-size:32px;color:#fff;font-family:"Fraunces",serif;font-weight:700;margin:0 auto 14px;border:3px solid rgba(155,127,232,.4)}
+    .name{font-family:"Fraunces",serif;font-size:26px;color:#f0ecff;font-weight:700;margin-bottom:4px}
+    .sub{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:24px}
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+    .stat{background:rgba(255,255,255,.06);border-radius:14px;padding:14px 8px}
+    .stat-n{font-family:"Fraunces",serif;font-size:28px;color:#9b7fe8;font-weight:700}
+    .stat-l{font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+    .badges{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:24px}
+    .b{background:rgba(232,197,106,.1);border:1px solid rgba(232,197,106,.25);border-radius:20px;padding:5px 12px;font-size:12px;color:#f5d98a;display:flex;align-items:center;gap:5px}
+    .coups{margin-bottom:24px}
+    .coup-title{font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+    .coup-item{display:flex;align-items:center;gap:10px;padding:9px 12px;background:rgba(255,255,255,.04);border-radius:12px;margin-bottom:7px;text-align:left}
+    .coup-cover{width:36px;height:52px;border-radius:5px;background:#2a2050;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px}
+    .coup-cover img{width:100%;height:100%;object-fit:cover}
+    .coup-t{font-size:13px;color:#f0ecff;font-weight:500}
+    .coup-a{font-size:11px;color:rgba(255,255,255,.4);margin-top:2px}
+    .cta{background:linear-gradient(135deg,#7c5cbf,#9b7fe8);border-radius:14px;padding:13px 20px;font-size:14px;font-weight:600;color:#fff;text-decoration:none;display:inline-block;margin-top:4px}
+    .coup-stars{font-size:11px;color:#e8c56a;margin-top:2px}
+  </style></head><body><div class="card">
+  <div class="logo">📚 Livroo</div>
+  <div class="avatar">${(DB.avatar()?'<img src="'+DB.avatar()+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':DB.userName()[0]?.toUpperCase()||'📚')}</div>
+  <div class="name">${DB.userName()}</div>
+  <div class="sub">Profil Livroo</div>
+  <div class="stats">
+    <div class="stat"><div class="stat-n">${lus.length}</div><div class="stat-l">Lus</div></div>
+    <div class="stat"><div class="stat-n">${avg}</div><div class="stat-l">Note moy.</div></div>
+    <div class="stat"><div class="stat-n">${pages>999?(pages/1000).toFixed(1)+'k':pages}</div><div class="stat-l">Pages</div></div>
+  </div>
+  ${badges.length ? '<div class="badges">'+badges.slice(0,8).map(b=>'<div class="b">'+b.icon+' '+b.name+'</div>').join('')+'</div>' : ''}
+  ${coups.length ? '<div class="coups"><div class="coup-title">💖 Mes coups de cœur</div>'+coups.slice(0,4).map(b=>'<div class="coup-item"><div class="coup-cover">'+(b.cover?'<img src="'+b.cover+'" onerror="this.remove()">':'📖')+'</div><div><div class="coup-t">'+(b.titre||'')+'</div><div class="coup-a">'+(b.auteur||'')+'</div>'+(b.note?'<div class="coup-stars">'+'⭐'.repeat(b.note)+'</div>':'')+'</div></div>').join('')+'</div>' : ''}
+  <a class="cta" href="${window.location.href.split('/').slice(0,-1).join('/')}/">Rejoindre Livroo 📚</a>
+  </div></body></html>`;
+
+  // Open in new tab
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  window.open(url,'_blank');
+  localStorage.setItem('lv_profile_shared','1');
+  toast('🔗 Profil public ouvert !');
+  checkBadgesIfNeeded();
+}
+
+function sharePublicProfile() {
+  if(navigator.share) {
+    navigator.share({
+      title: DB.userName()+' sur Livroo',
+      text: 'Découvrez mes lectures sur Livroo 📚',
+      url: window.location.href
+    }).catch(()=>{});
+  } else {
+    navigator.clipboard?.writeText(window.location.href).then(()=>toast('🔗 Lien copié !'));
+  }
+  localStorage.setItem('lv_profile_shared','1');
+  checkBadgesIfNeeded();
 }
 
 // ════════════════════════════════════════════

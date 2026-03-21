@@ -313,6 +313,28 @@
     .method-btn{flex:1;padding:10px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:13px;font-family:DM Sans,sans-serif;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
     .method-btn.active{border-color:var(--violet2);color:var(--violet2);background:rgba(124,92,191,.1)}
     .firebase-note{font-size:11px;color:var(--text3);text-align:center;margin-top:8px;line-height:1.5}
+    .rank-tabs{display:flex;gap:4px;background:var(--bg3);border-radius:12px;padding:3px;margin-bottom:14px}
+    .rank-tab{flex:1;padding:8px 4px;border-radius:9px;border:none;font-family:'DM Sans',sans-serif;font-size:11px;font-weight:500;cursor:pointer;background:none;color:var(--text3);transition:all .2s;text-align:center}
+    .rank-tab.active{background:var(--violet);color:#fff}
+    .rank-row{display:flex;align-items:center;gap:10px;padding:11px;background:var(--card);border:1px solid var(--border);border-radius:14px;margin-bottom:8px;cursor:pointer;transition:transform .15s}
+    .rank-row:active{transform:scale(.97)}
+    .rank-row.me{border-color:rgba(124,92,191,.4);background:rgba(124,92,191,.08)}
+    .rank-pos{font-family:'Fraunces',serif;font-size:18px;color:var(--text3);width:28px;text-align:center;flex-shrink:0}
+    .rank-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;font-family:'Fraunces',serif;overflow:hidden}
+    .rank-avatar img{width:100%;height:100%;object-fit:cover}
+    .rank-info{flex:1;min-width:0}
+    .rank-name{font-size:13px;color:var(--cream);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rank-sub{font-size:10px;color:var(--text3);margin-top:1px}
+    .rank-val{font-family:'Fraunces',serif;font-size:18px;color:var(--violet2);flex-shrink:0;text-align:right}
+    .exch-card{background:linear-gradient(135deg,rgba(92,196,176,.08),rgba(124,92,191,.08));border:1px solid rgba(92,196,176,.2);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+    .exch-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
+    .exch-pending{background:rgba(232,197,106,.15);color:var(--gold2);border:1px solid rgba(232,197,106,.3)}
+    .exch-accepted{background:rgba(92,196,138,.15);color:#7de8a8;border:1px solid rgba(92,196,138,.3)}
+    .exch-declined{background:rgba(232,124,138,.12);color:var(--rose);border:1px solid rgba(232,124,138,.25)}
+    .profile-modal{position:fixed;inset:0;background:rgba(0,0,0,.82);backdrop-filter:blur(10px);z-index:300;display:none;align-items:flex-end}
+    .profile-modal.open{display:flex;animation:slideUp .25s ease}
+    .profile-modal-inner{background:var(--bg2);border:1px solid var(--border);border-radius:22px 22px 0 0;padding:18px 16px calc(22px + var(--safe-bot));width:100%;max-height:90vh;overflow-y:auto}
+    .profile-modal-inner::-webkit-scrollbar{display:none}
   </style>
 </head>
 <body>
@@ -673,6 +695,7 @@ window._signOut = async () => {
   <button class="nav-btn" data-screen="shelf"><span class="icon">🏛️</span><span>Étagère</span></button>
   <button class="nav-btn nav-notif" data-screen="social"><span class="icon">👥</span><span id="notif-dot-wrap">Amis</span></button>
   <button class="nav-btn" data-screen="profil"><span class="icon">✨</span><span>Profil</span></button>
+  <button class="nav-btn" data-screen="ranking"><span class="icon">🏆</span><span>Classement</span></button>
 </nav>
 
 <!-- ═══ MODAL: AJOUTER/MODIFIER ═══ -->
@@ -746,6 +769,7 @@ window._signOut = async () => {
       <button class="btn btn-secondary" id="detail-close">Fermer</button>
       <button class="btn btn-primary" id="detail-edit">✏️ Modifier</button>
     </div>
+    <div class="btn-row" id="detail-exchange-row" style="display:none"><button class="btn btn-teal" id="detail-exchange">📦 Proposer un échange</button></div>
     <div class="btn-row" id="detail-reco-row" style="display:none">
       <button class="btn btn-gold" id="detail-reco">💌 Recommander à un ami</button>
     </div>
@@ -836,6 +860,39 @@ window._signOut = async () => {
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+<div id="screen-ranking" class="screen">
+  <div class="header"><h1>🏆 Classement</h1><p id="ranking-sub">Communauté Livroo</p></div>
+  <div class="scroll-area">
+    <div class="rank-tabs">
+      <button class="rank-tab active" data-rank="readers">📚 Lecteurs</button>
+      <button class="rank-tab" data-rank="veterans">📅 Ancienneté</button>
+      <button class="rank-tab" data-rank="contrib">🌟 Contributeurs</button>
+    </div>
+    <div id="ranking-list"></div>
+  </div>
+</div>
+
+<!-- PUBLIC PROFILE MODAL -->
+<div class="profile-modal" id="modal-public-profile">
+  <div class="profile-modal-inner">
+    <div class="modal-handle"></div>
+    <div id="public-profile-content"></div>
+    <div class="btn-row" style="margin-top:14px"><button class="btn btn-secondary" onclick="document.getElementById('modal-public-profile').classList.remove('open')">Fermer</button></div>
+  </div>
+</div>
+
+<!-- EXCHANGE MODAL -->
+<div class="modal-overlay" id="modal-exchange">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>📦 Proposer un échange</h2>
+    <div id="exchange-book-info" style="margin-bottom:14px"></div>
+    <div class="form-group"><label class="form-label">Choisir un ami</label><div id="exchange-friends-list"></div></div>
+    <div class="form-group"><label class="form-label">Message (optionnel)</label><textarea class="form-input" id="exchange-msg" placeholder="Ex : Je l’ai adoré !"></textarea></div>
+    <div class="btn-row"><button class="btn btn-secondary" id="exchange-cancel">Annuler</button><button class="btn btn-teal" id="exchange-send">📦 Proposer</button></div>
+  </div>
+</div>
+
 
 <script>
 // ════════════════════════════════════════════
@@ -894,7 +951,7 @@ function showScreen(name){
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   $id('screen-'+name).classList.add('active');
   document.querySelector(`[data-screen="${name}"]`).classList.add('active');
-  ({lectures:renderBooks,dashboard:renderDashboard,shelf:renderShelf,social:renderSocial,profil:renderProfil})[name]?.();
+  ({lectures:renderBooks,dashboard:renderDashboard,shelf:renderShelf,social:renderSocial,profil:renderProfil,ranking:renderRanking})[name]?.();
 }
 document.querySelectorAll('.nav-btn').forEach(b=>b.addEventListener('click',()=>showScreen(b.dataset.screen)));
 
@@ -1122,6 +1179,34 @@ async function renderSocial(){
     html += '<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Pas encore d’amis</div><div class="empty-sub">Ajoutez des amis pour partager vos lectures !</div></div>';
   }
 
+  loadExchanges().then(function(exchanges){
+    var uid=localStorage.getItem('lv_uid');
+    var inc=exchanges.filter(function(e){return e.to_id===uid&&e.status==='pending';});
+    var sent=exchanges.filter(function(e){return e.from_id===uid;});
+    var ex='';
+    if(inc.length){
+      ex+='<div class="sec-title">📦 Propositions d’échange <span style="background:var(--teal);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">'+inc.length+'</span></div>';
+      inc.forEach(function(e){
+        var cv=e.book_cover?'<img src="'+e.book_cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
+        ex+='<div class="exch-card"><div style="font-size:10px;color:var(--teal);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px">🤝 Proposition reçue</div>';
+        ex+='<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">';
+        ex+='<div style="width:40px;height:58px;border-radius:6px;background:'+bookColor(e.book_titre)+';display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;font-size:14px">'+cv+'</div>';
+        ex+='<div><div style="font-family:Fraunces,serif;color:var(--cream)">'+e.book_titre+'</div><div style="font-size:12px;color:var(--text2)">'+(e.book_auteur||'')+'</div>';
+        if(e.message)ex+='<div style="font-size:12px;font-style:italic;color:var(--text2);margin-top:4px">&ldquo;'+e.message+'&rdquo;</div>';
+        ex+='</div></div><div style="font-size:11px;color:var(--text3);margin-bottom:10px">🤝 Coordonnez-vous IRL si vous acceptez</div>';
+        ex+='<div class="btn-row" style="margin:0"><button class="btn btn-teal" style="font-size:12px;padding:9px" data-action="accept-exch" data-eid="'+e.id+'">✅ Accepter</button><button class="btn btn-secondary" style="font-size:12px;flex:0;padding:8px 12px" data-action="decline-exch" data-eid="'+e.id+'">✕</button></div></div>';
+      });
+    }
+    if(sent.length){
+      ex+='<div class="sec-title" style="font-size:13px;color:var(--text3);margin:14px 0 8px">📤 Mes propositions</div>';
+      sent.forEach(function(e){
+        var b2=e.status==='accepted'?'<span class="exch-badge exch-accepted">✅ Acceptée</span>':e.status==='declined'?'<span class="exch-badge exch-declined">❌ Refusée</span>':'<span class="exch-badge exch-pending">⏳ En attente</span>';
+        ex+='<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:12px;margin-bottom:8px"><div style="flex:1"><div style="font-size:13px;color:var(--cream)">'+e.book_titre+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+new Date(e.created_at).toLocaleDateString('fr-FR')+'</div></div>'+b2+'</div>';
+        if(e.status==='accepted')ex+='<div style="background:rgba(92,196,138,.08);border:1px solid rgba(92,196,138,.2);border-radius:10px;padding:10px;margin:-2px 0 8px;font-size:12px;color:#7de8a8">🤝 Coordonnez-vous avec votre ami pour l’échange IRL.</div>';
+      });
+    }
+    if(ex){var sc=$id('social-content');sc.innerHTML=ex+sc.innerHTML;}
+  });
   $id('social-content').innerHTML = html;
   // Event delegation for all social buttons
   $id('social-content').addEventListener('click', function handler(e) {
@@ -1143,6 +1228,10 @@ async function renderSocial(){
       document.getElementById('my-code-display').textContent = DB.myCode();
     } else if(action === 'remove-friend') {
       removeFriend(btn.getAttribute('data-fid'));
+    } else if(action === 'accept-exch') {
+      acceptExchange(btn.getAttribute('data-eid'));
+    } else if(action === 'decline-exch') {
+      declineExchange(btn.getAttribute('data-eid'));
     }
   });
 }
@@ -2238,6 +2327,211 @@ var _imgObserver = new MutationObserver(function(mutations) {
 _imgObserver.observe(document.body, { childList: true, subtree: true });
 
 // ════════════════════════════════════════════
+// RANKING & PUBLIC PROFILES
+// ════════════════════════════════════════════
+var _rankTab='readers',_rankData=[];
+document.querySelectorAll('.rank-tab').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.rank-tab').forEach(function(b){b.classList.remove('active');});
+    btn.classList.add('active');_rankTab=btn.getAttribute('data-rank');renderRankingList();
+  });
+});
+
+async function renderRanking(){
+  $id('ranking-sub').textContent='Chargement…';
+  $id('ranking-list').innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+  try{
+    var res=await _supa.from('public_profiles').select('*').order('books_count',{ascending:false}).limit(50);
+    _rankData=res.data||[];
+    var uid=localStorage.getItem('lv_uid');
+    if(uid&&!_rankData.find(function(u){return u.id===uid;}))_rankData.push(buildMyPublicProfile());
+    $id('ranking-sub').textContent=_rankData.length+' lecteur'+(_rankData.length!==1?'s':'');
+    renderRankingList();
+  }catch(e){_rankData=[buildMyPublicProfile()];renderRankingList();}
+}
+
+function buildMyPublicProfile(){
+  var books=DB.books();
+  var lus=books.filter(function(b){return b.statut==='Lu';});
+  var coups=books.filter(function(b){return b.coup;});
+  var pg=lus.reduce(function(s,b){return s+(parseInt(b.pages)||0);},0);
+  var noted=lus.filter(function(b){return b.note;});
+  var avg=noted.length?(noted.reduce(function(s,b){return s+b.note;},0)/noted.length).toFixed(1):0;
+  var badges=computeBadges(lus,coups,DB.quotes(),DB.friends()).filter(function(b){return b.unlocked;});
+  return{id:localStorage.getItem('lv_uid')||'me',pseudo:DB.userName(),avatar:DB.avatar()||null,
+    books_count:lus.length,pages_count:pg,avg_note:parseFloat(avg),badges_count:badges.length,
+    coups:coups.slice(0,5).map(function(b){return{titre:b.titre,auteur:b.auteur,cover:b.cover||''};}),
+    badges:badges.slice(0,8).map(function(b){return{icon:b.icon,name:b.name};}),
+    joined_at:parseInt(localStorage.getItem('lv_joined_at')||'0'),_isMe:true};
+}
+
+async function syncPublicProfile(){
+  var uid=localStorage.getItem('lv_uid');
+  if(!uid||localStorage.getItem('lv_guest')==='1')return;
+  try{
+    var p=buildMyPublicProfile();
+    await _supa.from('public_profiles').upsert({id:uid,pseudo:p.pseudo,avatar:p.avatar,
+      books_count:p.books_count,pages_count:p.pages_count,avg_note:p.avg_note,
+      badges_count:p.badges_count,coups:p.coups,badges:p.badges,
+      joined_at:p.joined_at,updated_at:new Date().toISOString()},{onConflict:'id'});
+  }catch(e){console.warn('syncPublicProfile:',e);}
+}
+
+function gradForUser(name){
+  var g=['linear-gradient(135deg,#3d2a6a,#7c5cbf)','linear-gradient(135deg,#2a3d6a,#5c7cbf)',
+    'linear-gradient(135deg,#6a2a3d,#bf5c7c)','linear-gradient(135deg,#2a6a4a,#5cbf7c)',
+    'linear-gradient(135deg,#4a3d2a,#bf9c5c)','linear-gradient(135deg,#2a4a6a,#5c9cbf)'];
+  var h=0;for(var i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))%g.length;
+  return g[Math.abs(h)];
+}
+
+function renderRankingList(){
+  var uid=localStorage.getItem('lv_uid');
+  var sorted=_rankData.slice();
+  var medals=['🥇','🥈','🥉'];
+  var valFn,subFn;
+  if(_rankTab==='readers'){
+    sorted.sort(function(a,b){return(b.books_count||0)-(a.books_count||0);});
+    valFn=function(u){return(u.books_count||0)+' 📚';};
+    subFn=function(u){return(u.avg_note?'★ '+u.avg_note+' · ':'')+((u.pages_count||0)).toLocaleString('fr-FR')+' pages';};
+  }else if(_rankTab==='veterans'){
+    sorted.sort(function(a,b){return(a.joined_at||Date.now())-(b.joined_at||Date.now());});
+    valFn=function(u){var d=u.joined_at?Math.floor((Date.now()-u.joined_at)/86400000):0;return d>=365?Math.floor(d/365)+' an'+(Math.floor(d/365)>1?'s':''):d+' j';};
+    subFn=function(u){return u.joined_at?'Inscrit en '+new Date(u.joined_at).toLocaleDateString('fr-FR',{month:'long',year:'numeric'}):'Inconnu';};
+  }else{
+    sorted.sort(function(a,b){return((b.badges_count||0)*3+(b.books_count||0))-((a.badges_count||0)*3+(a.books_count||0));});
+    valFn=function(u){return(u.badges_count||0)+' 🏆';};
+    subFn=function(u){var c=Array.isArray(u.coups)?u.coups.length:0;return(u.books_count||0)+' livres · '+c+' coups de cœur';};
+  }
+  var myPos=sorted.findIndex(function(u){return u.id===uid||u._isMe;});
+  var html='';
+  if(myPos>=0)html+='<div style="background:linear-gradient(135deg,rgba(124,92,191,.12),rgba(232,197,106,.08));border:1px solid rgba(124,92,191,.2);border-radius:14px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px"><div style="font-family:Fraunces,serif;font-size:24px;color:var(--gold2)">#'+(myPos+1)+'</div><div style="font-size:12px;color:var(--text2)">Votre position dans ce classement</div></div>';
+  sorted.forEach(function(u,i){
+    var isMe=u.id===uid||u._isMe;
+    var grad=gradForUser(u.pseudo||'?');
+    var avHtml=u.avatar?'<img src="'+u.avatar+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':
+      '<span>'+(u.pseudo||'?')[0].toUpperCase()+'</span>';
+    var pos=i<3?medals[i]:(i+1);
+    var uJ=encodeURIComponent(JSON.stringify(u));
+    html+='<div class="rank-row'+(isMe?' me':''+'"')+' onclick="openPublicProfileEnc(\''+uJ+'\')">'
+      +'<div class="rank-pos">'+pos+'</div>'
+      +'<div class="rank-avatar" style="background:'+grad+'">'+avHtml+'</div>'
+      +'<div class="rank-info"><div class="rank-name">'+(u.pseudo||'Lecteur')+(isMe?' (vous)':'')+'</div>'
+      +'<div class="rank-sub">'+subFn(u)+'</div></div>'
+      +'<div class="rank-val">'+valFn(u)+'</div></div>';
+  });
+  if(!sorted.length)html='<div class="empty"><div class="empty-icon">🏆</div><div class="empty-title">Aucun lecteur pour l’instant</div></div>';
+  $id('ranking-list').innerHTML=html;
+}
+
+function openPublicProfileEnc(enc){openPublicProfile(decodeURIComponent(enc));}
+
+function openPublicProfile(uJson){
+  var u=JSON.parse(uJson);
+  var uid=localStorage.getItem('lv_uid');
+  var isMe=u.id===uid||u._isMe;
+  var grad=gradForUser(u.pseudo||'?');
+  var avHtml=u.avatar
+    ?'<img src="'+u.avatar+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover;border-radius:50%">'
+    :'<div style="font-size:28px;font-weight:700">'+(u.pseudo||'?')[0].toUpperCase()+'</div>';
+  var days=u.joined_at?Math.floor((Date.now()-u.joined_at)/86400000):0;
+  var joined=u.joined_at?'Membre depuis '+(days>=365?Math.floor(days/365)+' an'+(Math.floor(days/365)>1?'s':''):days+' jour'+(days!==1?'s':'')):'' ;
+  var html='<div style="text-align:center;padding-bottom:14px">'
+    +'<div style="width:72px;height:72px;border-radius:50%;background:'+grad+';display:flex;align-items:center;justify-content:center;margin:0 auto 10px;border:3px solid rgba(155,127,232,.4);overflow:hidden;font-family:Fraunces,serif;color:#fff">'+avHtml+'</div>'
+    +'<div style="font-family:Fraunces,serif;font-size:22px;color:var(--cream)">'+(u.pseudo||'Lecteur')+(isMe?' (vous)':'')+'</div>'
+    +(joined?'<div style="font-size:11px;color:var(--text3);margin-top:3px">'+joined+'</div>':'')+'</div>';
+  html+='<div class="stats-grid" style="margin-bottom:14px">'
+    +'<div class="stat-card"><div class="stat-num">'+(u.books_count||0)+'</div><div class="stat-lbl">📚 Lus</div></div>'
+    +'<div class="stat-card"><div class="stat-num">'+(u.avg_note||'—')+'</div><div class="stat-lbl">★ Note</div></div>'
+    +'<div class="stat-card"><div class="stat-num">'+((u.pages_count||0)).toLocaleString('fr-FR')+'</div><div class="stat-lbl">Pages</div></div>'
+    +'<div class="stat-card"><div class="stat-num">'+(u.badges_count||0)+'</div><div class="stat-lbl">🏆 Badges</div></div></div>';
+  var coups=Array.isArray(u.coups)?u.coups:(u.coups?JSON.parse(u.coups):[]);
+  if(coups.length){
+    html+='<div class="sec-title">💖 Coups de cœur</div>';
+    coups.forEach(function(c){
+      var cv=c.cover?'<img src="'+c.cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
+      html+='<div style="display:flex;gap:10px;align-items:center;padding:9px;background:var(--bg3);border-radius:11px;margin-bottom:7px">'
+        +'<div style="width:36px;height:52px;border-radius:5px;background:'+bookColor(c.titre||'')+';display:flex;align-items:center;justify-content:center;font-size:14px;overflow:hidden;flex-shrink:0">'+cv+'</div>'
+        +'<div><div style="font-size:13px;color:var(--cream);font-weight:500">'+(c.titre||'')+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+(c.auteur||'')+'</div></div></div>';
+    });
+  }
+  var badges=Array.isArray(u.badges)?u.badges:(u.badges?JSON.parse(u.badges):[]);
+  if(badges.length){
+    html+='<div class="sec-title">🏆 Badges</div><div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px">';
+    badges.forEach(function(b){html+='<div style="background:rgba(232,197,106,.1);border:1px solid rgba(232,197,106,.25);border-radius:20px;padding:5px 11px;font-size:12px;color:var(--gold2)">'+b.icon+' '+b.name+'</div>';});
+    html+='</div>';
+  }
+  document.getElementById('public-profile-content').innerHTML=html;
+  document.getElementById('modal-public-profile').classList.add('open');
+}
+
+// ════════════════════════════════════════════
+// BOOK EXCHANGES
+// ════════════════════════════════════════════
+var _exchangeBook=null;
+
+async function openExchangeModal(bookId){
+  var book=DB.books().find(function(b){return b.id===bookId;});
+  if(!book)return;
+  _exchangeBook=book;
+  var cv=book.cover?'<img src="'+book.cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
+  $id('exchange-book-info').innerHTML='<div style="display:flex;gap:11px;align-items:center;padding:11px;background:var(--bg3);border-radius:12px">'
+    +'<div style="width:44px;height:64px;border-radius:7px;background:'+bookColor(book.titre)+';display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">'+cv+'</div>'
+    +'<div><div style="font-family:Fraunces,serif;color:var(--cream)">'+book.titre+'</div>'
+    +'<div style="font-size:12px;color:var(--text2)">'+(book.auteur||'')+'</div>'
+    +'<div style="font-size:11px;color:var(--teal);margin-top:4px">📦 Échange physique IRL uniquement</div></div></div>';
+  var friends=DB.friends().filter(function(f){return f.status!=='pending';});
+  var fl='';
+  friends.forEach(function(f){
+    var fn2=(f.name||'?').replace(/"/g,'&quot;');
+    fl+='<label style="display:flex;align-items:center;gap:9px;padding:10px;background:var(--bg3);border-radius:10px;margin-bottom:7px;cursor:pointer">'
+      +'<input type="checkbox" class="exch-friend-check" data-id="'+f.id+'" data-name="'+fn2+'" style="width:17px;height:17px;accent-color:var(--teal)">'
+      +'<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;font-weight:700">'+((f.name||'?')[0]).toUpperCase()+'</div>'
+      +'<span style="color:var(--cream)">'+(f.name||'?')+'</span></label>';
+  });
+  $id('exchange-friends-list').innerHTML=fl||'<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px">Ajoutez des amis pour proposer des échanges</div>';
+  $id('exchange-msg').value='';
+  $id('modal-exchange').classList.add('open');
+}
+$id('exchange-cancel').addEventListener('click',function(){$id('modal-exchange').classList.remove('open');});
+$id('exchange-send').addEventListener('click',async function(){
+  var checked=Array.from($id('exchange-friends-list').querySelectorAll('.exch-friend-check:checked'));
+  if(!checked.length){toast('⚠️ Sélectionnez au moins un ami');return;}
+  if(!_exchangeBook)return;
+  var uid=localStorage.getItem('lv_uid');
+  var msg=$id('exchange-msg').value.trim();
+  var btn=$id('exchange-send');btn.textContent='⏳…';btn.disabled=true;
+  try{
+    for(var ci=0;ci<checked.length;ci++){
+      if(uid)await _supa.from('book_exchanges').insert({from_id:uid,to_id:checked[ci].getAttribute('data-id'),
+        book_titre:_exchangeBook.titre,book_auteur:_exchangeBook.auteur||'',
+        book_cover:_exchangeBook.cover||'',book_pages:_exchangeBook.pages||'',message:msg,status:'pending'});
+    }
+    $id('modal-exchange').classList.remove('open');
+    toast('📦 Proposition envoyée !');
+  }catch(e){toast('⚠️ Erreur : '+(e.message||e));}
+  btn.textContent='📦 Proposer';btn.disabled=false;
+});
+
+async function loadExchanges(){
+  var uid=localStorage.getItem('lv_uid');
+  if(!uid||localStorage.getItem('lv_guest')==='1')return[];
+  try{var res=await _supa.from('book_exchanges').select('*').or('from_id.eq.'+uid+',to_id.eq.'+uid).order('created_at',{ascending:false});return res.data||[];}
+  catch(e){return[];}
+}
+async function acceptExchange(id){
+  try{await _supa.from('book_exchanges').update({status:'accepted'}).eq('id',id);
+  toast('✅ Échange accepté ! Coordonnez-vous pour l’échange physique 🤝');
+  if($id('screen-social').classList.contains('active'))renderSocial();}catch(e){toast('⚠️ Erreur');}
+}
+async function declineExchange(id){
+  try{await _supa.from('book_exchanges').update({status:'declined'}).eq('id',id);
+  toast('Proposition refusée');
+  if($id('screen-social').classList.contains('active'))renderSocial();}catch(e){toast('⚠️ Erreur');}
+}
+
+// ════════════════════════════════════════════
 // SERVICE WORKER
 // ════════════════════════════════════════════
 if('serviceWorker' in navigator) {
@@ -2269,6 +2563,7 @@ if('serviceWorker' in navigator) {
     showScreen('lectures');
     setTimeout(checkBadgesIfNeeded, 1000);
     setTimeout(checkAllNotifications, 2000);
+    setTimeout(syncPublicProfile, 3000);
   }
 
   function goToAuth() {

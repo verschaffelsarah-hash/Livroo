@@ -271,7 +271,14 @@
 
     /* ── PROFILE HEADER ── */
     .profile-banner{background:linear-gradient(135deg,rgba(124,92,191,.2),rgba(232,124,138,.15));border:1px solid rgba(124,92,191,.25);border-radius:var(--radius);padding:20px;margin-bottom:16px;text-align:center}
-    .profile-avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px;font-weight:700;font-family:Fraunces,serif;color:#fff}
+    .profile-avatar{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 0;font-weight:700;font-family:Fraunces,serif;color:#fff;overflow:hidden;border:3px solid rgba(155,127,232,.35);cursor:pointer;position:relative;transition:opacity .2s}
+    .profile-avatar:active{opacity:.75}
+    .profile-avatar img{width:100%;height:100%;object-fit:cover}
+    .avatar-edit-badge{position:absolute;bottom:0;right:0;width:22px;height:22px;background:var(--violet);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;border:2px solid var(--bg2);pointer-events:none}
+    .photo-drop{border:2px dashed var(--border2);border-radius:14px;padding:22px 16px;text-align:center;cursor:pointer;transition:border-color .2s;background:var(--bg3)}
+    .photo-drop:active{border-color:var(--violet2)}
+    .photo-drop-preview{width:90px;height:90px;border-radius:50%;overflow:hidden;border:3px solid var(--violet2);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:34px;background:var(--bg3)}
+    .photo-drop-preview img{width:100%;height:100%;object-fit:cover}
     .profile-name{font-family:Fraunces,serif;font-size:20px;color:var(--cream)}
     .profile-stats{display:flex;justify-content:center;gap:24px;margin-top:12px}
     .profile-stat{text-align:center}
@@ -1342,7 +1349,7 @@ function renderProfil(){
 
   $id('profil-content').innerHTML=`
     <div class="profile-banner">
-      <div class="profile-avatar">${DB.userName()[0]?.toUpperCase()||'📚'}</div>
+      <div class="profile-avatar" onclick="openPhotoModal()" title="Modifier la photo">${DB.avatar()?'<img src="'+DB.avatar()+'" onerror="this.remove()">':(DB.userName()[0]?.toUpperCase()||'\U0001F4DA')}<div class="avatar-edit-badge">📷</div></div>
       <div class="profile-name">${DB.userName()}</div>
       <div style="font-size:12px;color:var(--text3);margin-top:4px">Code : <span style="color:var(--violet3);font-weight:600">${DB.myCode()}</span></div>
       <div class="profile-stats">
@@ -2531,6 +2538,123 @@ async function declineExchange(id){
   if($id('screen-social').classList.contains('active'))renderSocial();}catch(e){toast('⚠️ Erreur');}
 }
 
+
+// ════════════════════════════════════════════
+// PHOTO DE PROFIL
+// ════════════════════════════════════════════
+var _pendingPhoto = null;
+
+function openPhotoModal() {
+  _pendingPhoto = null;
+  var preview = document.getElementById('photo-preview');
+  var placeholder = document.getElementById('photo-preview-placeholder');
+  var av = DB.avatar();
+  if(av) {
+    placeholder.style.display = 'none';
+    // Remove old img if any
+    var oldImg = preview.querySelector('img');
+    if(oldImg) oldImg.remove();
+    var img = document.createElement('img');
+    img.src = av;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+    preview.appendChild(img);
+  } else {
+    placeholder.style.display = '';
+    var oldImg2 = preview.querySelector('img');
+    if(oldImg2) oldImg2.remove();
+  }
+  document.getElementById('photo-delete').style.display = av ? '' : 'none';
+  document.getElementById('modal-photo').classList.add('open');
+}
+
+document.getElementById('photo-file-input').addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if(!file) return;
+  if(file.size > 2 * 1024 * 1024) { toast('\u26A0\uFE0F Image trop grande (max 2 Mo)'); return; }
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    _pendingPhoto = ev.target.result;
+    var preview = document.getElementById('photo-preview');
+    var oldImg = preview.querySelector('img');
+    if(oldImg) oldImg.remove();
+    document.getElementById('photo-preview-placeholder').style.display = 'none';
+    var img = document.createElement('img');
+    img.src = _pendingPhoto;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+    preview.appendChild(img);
+    document.getElementById('photo-delete').style.display = '';
+  };
+  reader.readAsDataURL(file);
+});
+
+// Drag & drop support
+var dropZone = document.getElementById('photo-drop');
+dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.style.borderColor='var(--violet2)'; });
+dropZone.addEventListener('dragleave', function(){ dropZone.style.borderColor=''; });
+dropZone.addEventListener('drop', function(e){
+  e.preventDefault(); dropZone.style.borderColor='';
+  var file = e.dataTransfer.files[0];
+  if(!file || !file.type.startsWith('image/')) return;
+  document.getElementById('photo-file-input').files; // trigger same flow
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    _pendingPhoto = ev.target.result;
+    var preview = document.getElementById('photo-preview');
+    var oldImg = preview.querySelector('img');
+    if(oldImg) oldImg.remove();
+    document.getElementById('photo-preview-placeholder').style.display = 'none';
+    var img = document.createElement('img');
+    img.src = _pendingPhoto;
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+    preview.appendChild(img);
+    document.getElementById('photo-delete').style.display = '';
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('photo-cancel').addEventListener('click', function(){
+  document.getElementById('modal-photo').classList.remove('open');
+  _pendingPhoto = null;
+});
+
+document.getElementById('photo-delete').addEventListener('click', function(){
+  if(!confirm('Supprimer votre photo de profil ?')) return;
+  localStorage.removeItem('lv_avatar');
+  _pendingPhoto = null;
+  document.getElementById('modal-photo').classList.remove('open');
+  // Sync to Supabase
+  var uid = localStorage.getItem('lv_uid');
+  if(uid) _supa.from('public_profiles').update({ avatar: null }).eq('id', uid).then(function(){});
+  if(uid) _supa.from('profiles').update({ avatar: null }).eq('id', uid).then(function(){});
+  toast('\uD83D\uDDD1\uFE0F Photo supprim\u00e9e');
+  if(document.getElementById('screen-profil').classList.contains('active')) renderProfil();
+  setTimeout(syncPublicProfile, 500);
+});
+
+document.getElementById('photo-save').addEventListener('click', async function(){
+  if(!_pendingPhoto) { toast('\u26A0\uFE0F Choisissez d\u2019abord une photo'); return; }
+  var btn = document.getElementById('photo-save');
+  btn.textContent = '\u23F3 Enregistrement\u2026'; btn.disabled = true;
+  try {
+    localStorage.setItem('lv_avatar', _pendingPhoto);
+    // Sync to Supabase profiles + public_profiles
+    var uid = localStorage.getItem('lv_uid');
+    if(uid) {
+      await _supa.from('profiles').update({ avatar: _pendingPhoto }).eq('id', uid);
+      await _supa.from('public_profiles').upsert({ id: uid, avatar: _pendingPhoto, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    }
+    document.getElementById('modal-photo').classList.remove('open');
+    _pendingPhoto = null;
+    toast('\u2705 Photo de profil mise \u00e0 jour !');
+    if(document.getElementById('screen-profil').classList.contains('active')) renderProfil();
+    setTimeout(syncPublicProfile, 500);
+  } catch(e) {
+    toast('\u26A0\uFE0F Erreur lors de l\u2019enregistrement');
+    console.error(e);
+  }
+  btn.textContent = '\uD83D\uDCBE Enregistrer'; btn.disabled = false;
+});
+
 // ════════════════════════════════════════════
 // SERVICE WORKER
 // ════════════════════════════════════════════
@@ -2633,5 +2757,26 @@ if('serviceWorker' in navigator) {
 
 })();
 </script>
+
+<!-- MODAL: PHOTO DE PROFIL -->
+<div class="modal-overlay" id="modal-photo">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>📷 Photo de profil</h2>
+    <div class="photo-drop" id="photo-drop" onclick="document.getElementById('photo-file-input').click()">
+      <div class="photo-drop-preview" id="photo-preview">
+        <span id="photo-preview-placeholder">📷</span>
+      </div>
+      <div style="font-size:13px;color:var(--text2);font-weight:500">Appuyer pour choisir une photo</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px">JPG ou PNG · Max 2 Mo</div>
+    </div>
+    <input type="file" id="photo-file-input" accept="image/jpeg,image/png,image/webp" style="display:none">
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn btn-secondary" id="photo-cancel">Annuler</button>
+      <button class="btn btn-danger" id="photo-delete" style="flex:0;padding:12px 16px">🗑️</button>
+      <button class="btn btn-primary" id="photo-save">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

@@ -353,6 +353,84 @@ async function cloudLoad(uid) {
   return false;
 }
 
+// ════════════════════════════════════════
+// SYSTÈME D'AMIS (Supabase)
+// ════════════════════════════════════════
+
+// Envoyer une demande d'ami
+async function sendFriendRequest(recipientCode, displayName) {
+  const uid = localStorage.getItem('lv_uid');
+  if(!uid) { toast('⚠️ Connectez-vous pour ajouter des amis'); return false; }
+  try {
+    // Trouver le profil destinataire via son code
+    const { data: recipient, error: findErr } = await _supa
+      .from('profiles').select('id,pseudo').eq('code', recipientCode).maybeSingle();
+    if(findErr || !recipient) {
+      toast('⚠️ Code introuvable — vérifiez avec votre ami'); return false;
+    }
+    if(recipient.id === uid) { toast("⚠️ C'est votre propre code !"); return false; }
+    // Vérifier si une demande existe déjà
+    const { data: existing } = await _supa.from('friendships')
+      .select('id,status')
+      .or('requester_id.eq.'+uid+',recipient_id.eq.'+uid)
+      .or('requester_id.eq.'+recipient.id+',recipient_id.eq.'+recipient.id)
+      .maybeSingle();
+    if(existing) { toast('⚠️ Une relation existe déjà avec cet ami'); return false; }
+    // Créer la demande
+    const { error } = await _supa.from('friendships').insert({
+      requester_id:   uid,
+      recipient_code: recipientCode,
+      recipient_id:   recipient.id,
+      status:         'pending'
+    });
+    if(error) throw error;
+    // Ajouter localement côté demandeur (en attente)
+    const friends = DB.friends();
+    friends.push({ id: recipient.id, name: displayName || recipient.pseudo, code: recipientCode, status: 'pending' });
+    DB.saveFriends(friends);
+    return true;
+  } catch(e) { console.error(e); toast('⚠️ Erreur : ' + (e.message||e)); return false; }
+}
+
+// Charger les demandes reçues en attente
+async function loadPendingRequests() {
+  const uid = localStorage.getItem('lv_uid');
+  if(!uid) return [];
+  try {
+    const { data } = await _supa.from('friendships')
+      .select('id,requester_id,status,created_at,profiles!friendships_requester_id_fkey(pseudo,code)')
+      .eq('recipient_id', uid)
+      .eq('status', 'pending');
+    return data || [];
+  } catch(e) { return []; }
+}
+
+// Accepter une demande
+async function acceptFriendRequest(friendshipId, requesterId, requesterPseudo, requesterCode) {
+  const uid = localStorage.getItem('lv_uid');
+  try {
+    await _supa.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId);
+    // Ajouter des deux côtés localement
+    const friends = DB.friends();
+    if(!friends.find(f => f.id === requesterId)) {
+      friends.push({ id: requesterId, name: requesterPseudo, code: requesterCode, status: 'accepted' });
+      DB.saveFriends(friends);
+    }
+    toast('✅ ' + requesterPseudo + ' est maintenant votre ami(e) !');
+    checkBadgesIfNeeded();
+    renderSocial();
+  } catch(e) { toast('⚠️ Erreur : ' + (e.message||e)); }
+}
+
+// Refuser une demande
+async function declineFriendRequest(friendshipId, requesterPseudo) {
+  try {
+    await _supa.from('friendships').update({ status: 'declined' }).eq('id', friendshipId);
+    toast('Demande de ' + requesterPseudo + ' refusée');
+    renderSocial();
+  } catch(e) { toast('⚠️ Erreur'); }
+}
+
 // Auto-save on every data change (wrapped after DB is defined in main script)
 window._cloudSave = cloudSave;
 
@@ -950,90 +1028,127 @@ function renderShelf(){
 // ════════════════════════════════════════════
 // SOCIAL
 // ════════════════════════════════════════════
-function renderSocial(){
-  const friends=DB.friends();
-  const recos=DB.recos().filter(r=>r.to==='me'&&!r.dismissed);
-  $id('social-subtitle').textContent=`${friends.length} ami${friends.length!==1?'s':''}`;
+async function renderSocial(){
+  const friends = DB.friends().filter(f => f.status !== 'pending');
+  const recos   = DB.recos().filter(r => r.to==='me' && !r.dismissed);
 
-  // Update notif dot
-  const dot=$id('notif-dot-wrap');
-  dot.innerHTML=recos.length?`Amis <span style="display:inline-block;width:8px;height:8px;background:var(--rose);border-radius:50%;margin-left:3px;vertical-align:middle"></span>`:'Amis';
+  // Charger les demandes reçues depuis Supabase
+  const pending = await loadPendingRequests();
+  const totalNotifs = recos.length + pending.length;
 
-  let html='';
+  $id('social-subtitle').textContent = friends.length + ' ami' + (friends.length!==1?'s':'');
 
-  // Recos received
+  // Notif dot
+  const dot = $id('notif-dot-wrap');
+  if(dot) dot.innerHTML = totalNotifs
+    ? 'Amis <span style="display:inline-block;width:8px;height:8px;background:var(--rose);border-radius:50%;margin-left:3px;vertical-align:middle"></span>'
+    : 'Amis';
+
+  let html = '';
+
+  // ── Demandes d’ami recues ──
+  if(pending.length) {
+    html += '<div class="section-title">🤝 Demandes d’amis <span style="background:var(--violet2);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">' + pending.length + '</span></div>';
+    pending.forEach(function(req) {
+      var pseudo = req.profiles ? req.profiles.pseudo : 'Utilisateur';
+      var rcode  = req.profiles ? req.profiles.code   : '';
+      var reqId  = req.id;
+      var reqUid = req.requester_id;
+      html += '<div class="reco-card" style="border-color:rgba(124,92,191,.3)">'
+        + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'
+        + '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;font-weight:700">' + (pseudo[0]||'?').toUpperCase() + '</div>'
+        + '<div><div style="font-size:14px;color:var(--cream);font-weight:500">' + pseudo + '</div>'
+        + '<div style="font-size:11px;color:var(--text3)">souhaite vous ajouter en ami(e)</div></div></div>'
+        + '<div class="btn-row" style="margin:0">'
+        + '<button class="btn btn-primary" style="font-size:12px;padding:9px" data-action="accept" data-fid="' + reqId + '" data-uid="' + reqUid + '" data-name="' + pseudo + '" data-code="' + rcode + '">✅ Accepter</button>'
+        + '<button class="btn btn-secondary" style="font-size:12px;padding:9px" data-action="decline" data-fid="' + reqId + '" data-name="' + pseudo + '">✕ Refuser</button>'
+        + '</div></div>';
+    });
+  }
+
+  // ── Recommandations reçues ──
   if(recos.length){
-    html+=`<div class="section-title">💌 Recommandations reçues <span style="background:var(--rose);color:#fff;font-size:10px;padding:2px 7px;border-radius:10px;font-family:DM Sans;font-weight:600">${recos.length}</span></div>`;
-    html+=recos.map(r=>`
-      <div class="reco-card">
-        <div class="reco-from">💌 ${r.fromName} vous recommande :</div>
-        <div class="reco-book">
-          <div class="reco-cover" style="background:${bookColor(r.book.titre)}">${r.book.cover?`<img src="${r.book.cover}" onerror="this.remove()">`:'📖'}</div>
-          <div class="reco-info">
-            <div class="reco-title">${r.book.titre}</div>
-            <div class="reco-author">${r.book.auteur||'—'}</div>
-            ${r.msg?`<div class="reco-msg">"${r.msg}"</div>`:''}
-          </div>
-        </div>
-        <div class="reco-actions">
-          <button class="reco-btn reco-add" onclick="addFromReco('${r.id}')">📚 Ajouter à ma liste</button>
-          <button class="reco-btn reco-dismiss" onclick="dismissReco('${r.id}')">✕</button>
-        </div>
-      </div>`).join('');
+    html += '<div class="section-title">💌 Recommandations <span style="background:var(--rose);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">' + recos.length + '</span></div>';
+    recos.forEach(function(r){
+      const coverHtml = r.book.cover ? '<img src="' + r.book.cover + '" onerror="this.remove()">' : '📖';
+      const msgHtml   = r.msg ? '<div style="font-size:12px;font-style:italic;color:var(--text2);margin-top:4px">"' + r.msg + '"</div>' : '';
+      html += '<div class="reco-card">'
+        + '<div style="font-size:10px;color:var(--rose2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;font-weight:600">💌 ' + r.fromName + ' recommande :</div>'
+        + '<div style="display:flex;gap:10px;align-items:center">'
+        + '<div class="book-cover" style="background:' + bookColor(r.book.titre) + ';width:44px;height:66px">' + coverHtml + '</div>'
+        + '<div style="flex:1"><div style="font-family:Fraunces,serif;color:var(--cream)">' + r.book.titre + '</div>'
+        + '<div style="font-size:12px;color:var(--text2)">' + (r.book.auteur||'—') + '</div>' + msgHtml + '</div></div>'
+        + '<div class="btn-row" style="margin-top:10px">'
+        + '<button class="btn btn-secondary" style="font-size:11px;padding:8px" data-action="add-reco" data-rid="' + r.id + '">📚 Ajouter à ma liste</button>'
+        + '<button class="btn btn-secondary" style="font-size:11px;padding:8px;flex:0;padding:8px 12px" data-action="dismiss-reco" data-rid="' + r.id + '">✕</button>'
+        + '</div></div>';
+    });
   }
 
-  // Add friend button
-  html+=`<button class="btn btn-primary" style="width:100%;margin-bottom:16px" onclick="$id('modal-add-friend').classList.add('open');renderMyCode()">➕ Ajouter un ami</button>`;
+  // ── Demandes envoyées en attente ──
+  const sent = DB.friends().filter(f => f.status === 'pending');
+  if(sent.length) {
+    html += '<div class="sec-title" style="font-size:13px;color:var(--text3);margin:14px 0 8px">⏳ Demandes envoyées</div>';
+    sent.forEach(function(f){
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:12px;margin-bottom:8px;opacity:.7">'
+        + '<div style="width:36px;height:36px;border-radius:50%;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text3)">⏳</div>'
+        + '<div style="flex:1"><div style="font-size:13px;color:var(--text2)">' + f.name + '</div><div style="font-size:10px;color:var(--text3)">En attente d’acceptation</div></div>'
+        + '<button data-action="cancel-friend" data-code="' + f.code + '" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer">Annuler</button>'
+        + '</div>';
+    });
+  }
 
-  // Friends list
+  // ── Bouton ajouter ──
+  html += '<button class="btn btn-primary" style="width:100%;margin:14px 0 10px" data-action="open-add-friend">➕ Ajouter un ami</button>';
+
+  // ── Liste amis acceptés ──
   if(friends.length){
-    html+=`<div class="section-title">👥 Mes amis</div>`;
-    html+=friends.map(f=>`
-      <div class="friend-card">
-        <div class="friend-avatar">${f.name[0]?.toUpperCase()||'?'}</div>
-        <div class="friend-info">
-          <div class="friend-name">${f.name}</div>
-          <div class="friend-sub">Code : ${f.code}</div>
-        </div>
-        <button class="friend-action" style="background:rgba(232,124,138,.15);color:var(--rose);border:1px solid rgba(232,124,138,.25)" onclick="removeFriend('${f.id}')">Retirer</button>
-      </div>`).join('');
+    html += '<div class="section-title">👥 Mes amis</div>';
+    friends.forEach(function(f){
+      html += '<div class="friend-card">'
+        + '<div class="friend-avatar">' + (f.name[0]||'?').toUpperCase() + '</div>'
+        + '<div class="friend-info"><div class="friend-name">' + f.name + '</div><div class="friend-sub">Code : ' + f.code + '</div></div>'
+        + '<button data-action="remove-friend" data-fid="' + f.id + '" style="background:rgba(232,124,138,.12);color:var(--rose);border:1px solid rgba(232,124,138,.2);padding:6px 12px;border-radius:9px;font-size:11px;cursor:pointer">Retirer</button>'
+        + '</div>';
+    });
   }
 
-  // Activity feed (simulated)
-  const feed=buildFeed();
-  if(feed.length){
-    html+=`<div class="section-title">📡 Activité récente</div>`;
-    html+=`<div class="card">${feed.map(f=>`
-      <div class="activity-item">
-        <div class="activity-avatar">${f.avatar}</div>
-        <div style="flex:1">
-          <div class="activity-text">${f.text}</div>
-          <div class="activity-time">${f.time}</div>
-          ${f.book?`<div class="activity-book-mini" onclick="openDetail('${f.book.id}')">
-            <div class="activity-book-mini-cover" style="background:${bookColor(f.book.titre)}">${f.book.cover?`<img src="${f.book.cover}" onerror="this.remove()">`:'📖'}</div>
-            <div><div style="font-size:13px;color:var(--cream)">${f.book.titre}</div><div style="font-size:11px;color:var(--text3)">${f.book.auteur||''}</div></div>
-          </div>`:''}
-        </div>
-      </div>`).join('')}</div>`;
+  if(!friends.length && !recos.length && !pending.length){
+    html += '<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Pas encore d’amis</div><div class="empty-sub">Ajoutez des amis pour partager vos lectures !</div></div>';
   }
 
-  if(!friends.length&&!recos.length){
-    html+=`<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Pas encore d'amis</div><div class="empty-sub">Ajoutez des amis pour partager vos lectures et recommandations !</div></div>`;
-  }
-
-  $id('social-content').innerHTML=html;
+  $id('social-content').innerHTML = html;
+  // Event delegation for all social buttons
+  $id('social-content').addEventListener('click', function handler(e) {
+    var btn = e.target.closest('[data-action]');
+    if(!btn) return;
+    var action = btn.getAttribute('data-action');
+    if(action === 'accept') {
+      acceptFriendRequest(btn.getAttribute('data-fid'), btn.getAttribute('data-uid'), btn.getAttribute('data-name'), btn.getAttribute('data-code'));
+    } else if(action === 'decline') {
+      declineFriendRequest(btn.getAttribute('data-fid'), btn.getAttribute('data-name'));
+    } else if(action === 'add-reco') {
+      addFromReco(btn.getAttribute('data-rid'));
+    } else if(action === 'dismiss-reco') {
+      dismissReco(btn.getAttribute('data-rid'));
+    } else if(action === 'cancel-friend') {
+      cancelFriendRequest(btn.getAttribute('data-code'));
+    } else if(action === 'open-add-friend') {
+      document.getElementById('modal-add-friend').classList.add('open');
+      document.getElementById('my-code-display').textContent = DB.myCode();
+    } else if(action === 'remove-friend') {
+      removeFriend(btn.getAttribute('data-fid'));
+    }
+  });
 }
 
-function buildFeed(){
-  const books=DB.books().filter(b=>b.statut==='Lu').slice(0,3);
-  const friends=DB.friends();
-  if(!books.length||!friends.length)return[];
-  return books.map((b,i)=>({
-    avatar:friends[i%friends.length]?.name[0]?.toUpperCase()||'?',
-    text:`<strong>${friends[i%friends.length]?.name||'Ami'}</strong> a terminé un livre`,
-    time:timeAgo(Date.now()-i*3600000*2),
-    book:b
-  }));
+// Placeholder pour le feed (conservé pour compatibilité)
+function buildFeed(){ return []; }
+
+function cancelFriendRequest(code) {
+  DB.saveFriends(DB.friends().filter(f => f.code !== code));
+  toast('Demande annulée');
+  renderSocial();
 }
 
 function addFromReco(id){
@@ -1084,23 +1199,40 @@ $id('share-code-btn').addEventListener('click',()=>{
 });
 
 $id('add-friend-cancel').addEventListener('click',()=>$id('modal-add-friend').classList.remove('open'));
-$id('add-friend-confirm').addEventListener('click',()=>{
-  const code=$id('friend-code-input').value.trim().toUpperCase();
-  const name=$id('friend-name-input').value.trim();
-  if(!code||code.length<4){toast('⚠️ Code invalide');return;}
-  if(!name){toast('⚠️ Entrez un prénom');return;}
-  if(code===DB.myCode()){toast('⚠️ C\'est votre propre code !');return;}
-  const friends=DB.friends();
-  if(friends.find(f=>f.code===code)){toast('⚠️ Cet ami est déjà ajouté');return;}
-  friends.push({id:Date.now().toString(),name,code});
-  DB.saveFriends(friends);
-  $id('friend-code-input').value='';
-  $id('friend-name-input').value='';
-  $id('modal-add-friend').classList.remove('open');
-  recordSponsor();
-  toast(`✅ ${name} ajouté(e) !`);
-  checkBadgesIfNeeded();
-  renderSocial();
+$id('add-friend-confirm').addEventListener('click', async () => {
+  const code = $id('friend-code-input').value.trim().toUpperCase();
+  const name = $id('friend-name-input').value.trim();
+  if(!code || code.length < 4){ toast('⚠️ Code invalide'); return; }
+  if(!name){ toast('⚠️ Entrez un prénom'); return; }
+  if(code === DB.myCode()){ toast("⚠️ C'est votre propre code !"); return; }
+  const friends = DB.friends();
+  if(friends.find(f => f.code === code)){ toast('⚠️ Cet ami est déjà ajouté'); return; }
+  const btn = $id('add-friend-confirm');
+  btn.textContent = '⏳…'; btn.disabled = true;
+  const uid = localStorage.getItem('lv_uid');
+  if(uid) {
+    // Connecté → envoyer via Supabase (l'ami recevra la demande)
+    const ok = await sendFriendRequest(code, name);
+    if(ok) {
+      $id('friend-code-input').value = '';
+      $id('friend-name-input').value = '';
+      $id('modal-add-friend').classList.remove('open');
+      toast('📤 Demande envoyée à ' + name + ' !');
+      checkBadgesIfNeeded();
+      renderSocial();
+    }
+  } else {
+    // Invité → local uniquement
+    friends.push({ id: Date.now().toString(), name, code, status: 'accepted' });
+    DB.saveFriends(friends);
+    $id('friend-code-input').value = '';
+    $id('friend-name-input').value = '';
+    $id('modal-add-friend').classList.remove('open');
+    recordSponsor();
+    toast('✅ ' + name + ' ajouté(e) !');
+    renderSocial();
+  }
+  btn.textContent = '✅ Ajouter'; btn.disabled = false;
 });
 
 // ════════════════════════════════════════════

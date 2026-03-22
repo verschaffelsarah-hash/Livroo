@@ -43,12 +43,22 @@
     .screen.active{display:flex}
 
     /* ── SPLASH ── */
-    #splash{background:radial-gradient(ellipse at 50% 40%,#1e1040 0%,#0d0d1a 70%);justify-content:center;align-items:center;gap:18px;animation:fadeIn .5s ease}
-    .splash-icon{font-size:72px;animation:float 3s ease-in-out infinite}
-    .splash-logo{font-family:Fraunces,serif;font-size:48px;font-weight:700;background:linear-gradient(135deg,var(--violet2),var(--rose),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-    .splash-tagline{font-size:13px;color:var(--text3);letter-spacing:3px;text-transform:uppercase}
-    .splash-bar{width:140px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:10px}
-    .splash-progress{height:100%;background:linear-gradient(90deg,var(--violet2),var(--rose));border-radius:2px;animation:progress 1.6s ease forwards}
+    #splash{background:radial-gradient(ellipse at 50% 40%,#1e1040 0%,#0d0d1a 70%);justify-content:center;align-items:center;gap:0;overflow:hidden;position:relative}
+    #splash::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 30% 20%,rgba(124,92,191,.18) 0%,transparent 60%),radial-gradient(ellipse at 70% 80%,rgba(232,124,138,.12) 0%,transparent 60%)}
+    .splash-books{display:flex;gap:10px;margin-bottom:28px;animation:splashBooksIn .7s cubic-bezier(.34,1.56,.64,1) both}
+    .splash-book{width:38px;height:56px;border-radius:4px 6px 6px 4px;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:2px 4px 12px rgba(0,0,0,.4);animation:splashBookFloat 3s ease-in-out infinite}
+    .splash-book:nth-child(1){background:linear-gradient(135deg,#7c5cbf,#9b7fe8);animation-delay:.3s}
+    .splash-book:nth-child(2){background:linear-gradient(135deg,#e87c8a,#e8c56a);animation-delay:.1s;transform:translateY(-8px)}
+    .splash-book:nth-child(3){background:linear-gradient(135deg,#5cc4b0,#5c9cbf);animation-delay:.5s}
+    .splash-logo{font-family:Fraunces,serif;font-size:52px;font-weight:700;background:linear-gradient(135deg,var(--violet2),var(--rose),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:splashLogoIn .6s .15s cubic-bezier(.34,1.56,.64,1) both;margin-bottom:6px}
+    .splash-tagline{font-size:12px;color:var(--text3);letter-spacing:3px;text-transform:uppercase;animation:splashFadeIn .5s .4s both;margin-bottom:32px}
+    .splash-bar{width:160px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;animation:splashFadeIn .4s .5s both}
+    .splash-progress{height:100%;background:linear-gradient(90deg,var(--violet2),var(--rose));border-radius:2px;animation:progress 2.2s .5s ease forwards}
+    .splash-greeting{font-size:14px;color:var(--text2);animation:splashFadeIn .5s .6s both;margin-top:12px;font-style:italic}
+    @keyframes splashBooksIn{from{opacity:0;transform:translateY(30px) scale(.8)}to{opacity:1;transform:translateY(0) scale(1)}}
+    @keyframes splashBookFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+    @keyframes splashLogoIn{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+    @keyframes splashFadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     @keyframes progress{from{width:0}to{width:100%}}
     @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
     @keyframes fadeIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
@@ -633,10 +643,15 @@ window._signOut = async () => {
 
 <!-- SPLASH -->
 <div id="splash" class="screen">
-  <div class="splash-icon">📚</div>
+  <div class="splash-books">
+    <div class="splash-book">📖</div>
+    <div class="splash-book">✨</div>
+    <div class="splash-book">📚</div>
+  </div>
   <div class="splash-logo">Livroo</div>
   <div class="splash-tagline">Votre vie en livres</div>
   <div class="splash-bar"><div class="splash-progress"></div></div>
+  <div class="splash-greeting" id="splash-greeting"></div>
 </div>
 
 <!-- ═══ LECTURES ═══ -->
@@ -712,9 +727,11 @@ window._signOut = async () => {
     <div class="form-group">
       <label class="form-label">🔍 Recherche automatique</label>
       <div class="search-bar">
-        <input class="search-input" id="search-api" placeholder="Titre ou auteur…">
+        <input class="search-input" id="search-api" placeholder="Titre, auteur ou ISBN…">
         <button class="search-btn" id="search-api-btn">🔍</button>
+        <button class="search-btn" id="scan-isbn-btn" title="Scanner le code-barres" style="margin-left:4px">📷</button>
       </div>
+      <input type="file" id="scan-file-input" accept="image/*" capture="environment" style="display:none">
       <div id="api-results"></div>
     </div>
     <div class="divider">ou saisir manuellement</div>
@@ -730,7 +747,7 @@ window._signOut = async () => {
       </select>
     </div>
     <div class="form-group"><label class="form-label">Statut</label>
-      <select class="form-input" id="f-statut">
+      <select class="form-input" id="f-statut" onchange="toggleCurrentPageField()">
         <option>À lire</option><option>En cours</option><option>Lu</option>
       </select>
     </div>
@@ -752,7 +769,8 @@ window._signOut = async () => {
     </div>
     <div class="form-group"><label class="form-label">Résumé</label><textarea class="form-input" id="f-resume" placeholder="Vos impressions…"></textarea></div>
     <div class="form-group"><label class="form-label">Citation favorite</label><textarea class="form-input" id="f-citation" placeholder="Une phrase qui vous a marqué…"></textarea></div>
-    <div class="form-group"><label class="form-label">Pages</label><input class="form-input" id="f-pages" type="number" placeholder="Ex : 350"></div>
+    <div class="form-group"><label class="form-label">Nombre de pages total</label><input class="form-input" id="f-pages" type="number" placeholder="Ex : 350" oninput="toggleCurrentPageField()"></div>
+    <div class="form-group" id="current-page-group" style="display:none"><label class="form-label">📖 Page actuelle (en cours)</label><div style="display:flex;gap:8px;align-items:center"><input class="form-input" id="f-current-page" type="number" placeholder="Ex : 120" style="flex:1"><span id="f-pages-pct" style="font-size:12px;color:var(--teal);white-space:nowrap;font-weight:600"></span></div></div>
     <div class="form-group"><label class="form-label">Date de lecture</label><input class="form-input" id="f-date" type="date"></div>
     <div class="form-group"><label class="form-label">Éditeur</label><input class="form-input" id="f-editeur" placeholder="Ex : Gallimard"></div>
     <input type="hidden" id="f-cover"><input type="hidden" id="f-id">
@@ -1439,10 +1457,10 @@ function computeBadges(lus,coups,quotes,friends){
     {icon:'⭐',name:'Critique',          unlocked:lus.filter(b=>b.note>=4).length>=3,id:'critic',  cond:'3 livres notés 4+ étoiles',    how:'Notez vos livres avec 4 ou 5 étoiles',                   prog:lus.filter(b=>b.note>=4).length+'/3'},
     {icon:'🌍',name:'Explorateur',       unlocked:[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length>=4,id:'explorer',cond:'Lire dans 4 genres différents',     how:'Ajoutez des livres de genres variés',                    prog:gen+'/4'},
     {icon:'🎯',name:'Objectif atteint',  unlocked:(()=>{const g=DB.goal();return g.target&&lus.length>=g.target;})(),id:'goal',    cond:'Atteindre votre objectif annuel',        how:'Stats → Définir un objectif et le compléter', prog:lus.length+'/'+(goal.target||'?')},
-    {icon:'📅',name:'1 semaine',         unlocked:days>=7,id:'week',    cond:'7 jours sur Livroo',                     how:'Revenez chaque jour !',                                       prog:Math.min(days,7)+'/7 j'},
-    {icon:'🗓️',name:'1 mois',            unlocked:days>=30,id:'month',   cond:'30 jours sur Livroo',                    how:'Fidélité récompensée !',                  prog:Math.min(days,30)+'/30 j'},
-    {icon:'🏅',name:'3 mois',            unlocked:days>=90,id:'months3', cond:'90 jours sur Livroo',                    how:'Vous êtes un pilier de la communauté !',             prog:Math.min(days,90)+'/90 j'},
-    {icon:'🎂',name:'1 an',              unlocked:days>=365,id:'year',    cond:'365 jours sur Livroo',                   how:'Légende Livroo !',                                       prog:Math.min(days,365)+'/365 j'},
+    {icon:'📅',name:'1 semaine',         unlocked:days>=7,id:'week',    cond:'7 jours sur Livroo',                     how:'Revenez chaque jour !',                                       prog:Math.min(daysUsedApp(),7)+'/7 j'},
+    {icon:'🗓️',name:'1 mois',            unlocked:days>=30,id:'month',   cond:'30 jours sur Livroo',                    how:'Fidélité récompensée !',                  prog:Math.min(daysUsedApp(),30)+'/30 j'},
+    {icon:'🏅',name:'3 mois',            unlocked:days>=90,id:'months3', cond:'90 jours sur Livroo',                    how:'Vous êtes un pilier de la communauté !',             prog:Math.min(daysUsedApp(),90)+'/90 j'},
+    {icon:'🎂',name:'1 an',              unlocked:days>=365,id:'year',    cond:'365 jours sur Livroo',                   how:'Légende Livroo !',                                       prog:Math.min(daysUsedApp(),365)+'/365 j'},
     {icon:'📄',name:'1 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=1000,id:'p1000',   cond:'Lire 1 000 pages au total',              how:'Renseignez les pages de vos livres lus',                      prog:pg+'/1000'},
     {icon:'📰',name:'5 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=5000,id:'p5000',   cond:'Lire 5 000 pages au total',              how:'Continuez à lire !',                                    prog:pg+'/5000'},
     {icon:'🔗',name:'Profil partagé',    unlocked:!!localStorage.getItem('lv_profile_shared'),id:'share',   cond:'Partager son profil public',             how:'Profil → Mon profil public → Partager',             prog:localStorage.getItem('lv_profile_shared')?'Fait':'À faire'},
@@ -1516,9 +1534,31 @@ function recordSponsor() {
 }
 
 function daysSinceJoin() {
-  let v = localStorage.getItem('lv_joined_at');
-  if(!v){ v = Date.now().toString(); localStorage.setItem('lv_joined_at',v); }
-  return Math.floor((Date.now()-parseInt(v))/86400000);
+  // Legacy: days since first join (used for some badges)
+  var v = localStorage.getItem('lv_joined_at');
+  if(!v){ v = Date.now().toString(); localStorage.setItem('lv_joined_at', v); }
+  return Math.floor((Date.now() - parseInt(v)) / 86400000);
+}
+
+function trackAppSession() {
+  // Record each unique calendar day the app is opened
+  var today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  var days = JSON.parse(localStorage.getItem('lv_session_days') || '[]');
+  if(!days.includes(today)) {
+    days.push(today);
+    localStorage.setItem('lv_session_days', JSON.stringify(days));
+  }
+}
+
+function daysUsedApp() {
+  // Number of distinct days the app was opened
+  var days = JSON.parse(localStorage.getItem('lv_session_days') || '[]');
+  // Fallback: if no session data yet, use daysSinceJoin estimate
+  if(days.length === 0) {
+    var d = daysSinceJoin();
+    return Math.min(d, 1); // at least 1 if app was ever opened
+  }
+  return days.length;
 }
 
 function deleteQuote(i){
@@ -1617,9 +1657,21 @@ $on('reco-send', 'click',()=>{
 // ════════════════════════════════════════════
 // ADD / EDIT
 // ════════════════════════════════════════════
+function toggleCurrentPageField() {
+  var statut = $id('f-statut') ? $id('f-statut').value : '';
+  var grp = document.getElementById('current-page-group');
+  if(grp) grp.style.display = (statut === 'En cours') ? '' : 'none';
+  // Update percentage
+  var cur = parseInt(($id('f-current-page')||{}).value) || 0;
+  var tot = parseInt(($id('f-pages')||{}).value) || 0;
+  var pct = document.getElementById('f-pages-pct');
+  if(pct) pct.textContent = (cur && tot) ? Math.round(cur/tot*100) + '%' : '';
+}
+
 function resetForm(){
   note=0;isCoup=false;
-  ['f-titre','f-auteur','f-resume','f-citation','f-pages','f-editeur','f-cover','f-id'].forEach(id=>$id(id).value='');
+  ['f-titre','f-auteur','f-resume','f-citation','f-pages','f-editeur','f-cover','f-id','f-current-page'].forEach(id=>{if($id(id))$id(id).value='';});
+  toggleCurrentPageField();
   $id('f-genre').value='';$id('f-statut').value='À lire';$id('f-date').value='';
   $id('search-api').value='';$id('api-results').innerHTML='';
   $id('reco-msg').value='';
@@ -1634,6 +1686,8 @@ function openEdit(b){
   $id('f-genre').value=b.genre||'';$id('f-statut').value=b.statut||'À lire';
   $id('f-resume').value=b.resume||'';$id('f-citation').value=b.citation||'';
   $id('f-pages').value=b.pages||'';$id('f-date').value=b.date||'';
+  if($id('f-current-page')) $id('f-current-page').value=b.currentPage||'';
+  toggleCurrentPageField();
   $id('f-editeur').value=b.editeur||'';$id('f-cover').value=b.cover||'';
   $id('f-id').value=b.id;
   $id('btn-delete-row').style.display='flex';
@@ -1667,10 +1721,28 @@ $on('modal-add', 'click',e=>{if(e.target===$id('modal-add'))$id('modal-add').cla
 $on('btn-save', 'click',()=>{
   const titre=$id('f-titre').value.trim();
   if(!titre){toast('⚠️ Le titre est obligatoire');return;}
-  const book={titre,auteur:$id('f-auteur').value.trim(),genre:$id('f-genre').value,statut:$id('f-statut').value,note:note||null,coup:isCoup,resume:$id('f-resume').value.trim(),citation:$id('f-citation').value.trim(),pages:$id('f-pages').value,date:$id('f-date').value,editeur:$id('f-editeur').value.trim(),cover:$id('f-cover').value};
+  var _statut=$id('f-statut').value;
+  const book={titre,auteur:$id('f-auteur').value.trim(),genre:$id('f-genre').value,statut:_statut,note:note||null,coup:isCoup,resume:$id('f-resume').value.trim(),citation:$id('f-citation').value.trim(),pages:$id('f-pages').value,currentPage:_statut==='En cours'?($id('f-current-page').value||null):null,date:$id('f-date').value,editeur:$id('f-editeur').value.trim(),cover:$id('f-cover').value};
   const books=DB.books();
-  if(editId){book.id=editId;const i=books.findIndex(b=>b.id===editId);if(i>=0)books[i]=book;DB.saveBooks(books);toast('✅ Livre mis à jour !')}
-  else{book.id=Date.now().toString();books.unshift(book);DB.saveBooks(books);toast('✅ Livre ajouté !')}
+  if(editId){
+    book.id=editId;
+    const i=books.findIndex(b=>b.id===editId);
+    if(i>=0){
+      const prev=books[i];
+      book.addedAt=prev.addedAt||Date.now();
+      const hist=prev.statusHistory||[];
+      if(prev.statut!==book.statut) hist.push({status:book.statut,date:Date.now()});
+      book.statusHistory=hist;
+      books[i]=book;
+    }
+    DB.saveBooks(books);toast('✅ Livre mis à jour !')
+  }
+  else{
+    book.id=Date.now().toString();
+    book.addedAt=Date.now();
+    book.statusHistory=[{status:book.statut,date:Date.now()}];
+    books.unshift(book);DB.saveBooks(books);toast('✅ Livre ajouté !')
+  }
   // Auto-save citation
   if(book.citation&&book.statut==='Lu'){
     const quotes=DB.quotes();quotes.unshift({text:book.citation,book:book.titre,author:book.auteur});
@@ -2576,6 +2648,32 @@ async function declineExchange(id){
 
 
 // ════════════════════════════════════════════
+// IMAGE COMPRESSION
+// ════════════════════════════════════════════
+function compressImage(file, maxSize, quality, callback) {
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      // Resize so longest side <= maxSize
+      if(w > maxSize || h > maxSize) {
+        if(w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+        else       { w = Math.round(w * maxSize / h); h = maxSize; }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+
+// ════════════════════════════════════════════
 // PHOTO DE PROFIL
 // ════════════════════════════════════════════
 var _pendingPhoto = null;
@@ -2702,6 +2800,58 @@ function _initPhotoListeners() {
 
 
 
+
+// ════════════════════════════════════════════
+// SCAN CODE-BARRE (ISBN)
+// ════════════════════════════════════════════
+$on('scan-isbn-btn', 'click', function() {
+  // Try camera barcode scan
+  var input = document.getElementById('scan-file-input');
+  if(input) input.click();
+});
+
+(function() {
+  var scanInput = document.getElementById('scan-file-input');
+  if(!scanInput) return;
+  scanInput.addEventListener('change', async function(e) {
+    var file = e.target.files[0];
+    if(!file) return;
+    // Try to decode barcode using ZXing library
+    var el = $id('api-results');
+    if(el) el.innerHTML = '<div class="loading"><div class="spinner"></div>Lecture du code-barres…</div>';
+    try {
+      // Load ZXing dynamically if needed
+      if(!window.ZXing) {
+        await new Promise(function(res, rej) {
+          var s = document.createElement('script');
+          s.src = 'https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js';
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      var reader2 = new window.ZXing.BrowserMultiFormatReader();
+      var img = new Image();
+      img.src = URL.createObjectURL(file);
+      await new Promise(function(r) { img.onload = r; });
+      var canvas = document.createElement('canvas');
+      canvas.width = img.width; canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      var result = await reader2.decodeFromCanvas(canvas);
+      var isbn = result.getText();
+      if(el) el.innerHTML = '<div style="color:var(--teal);font-size:13px;padding:6px 0">✅ ISBN détecté : ' + isbn + ' — Recherche en cours…</div>';
+      $id('search-api').value = isbn;
+      await searchBooks();
+      scanInput.value = '';
+    } catch(err) {
+      // Fallback: ask user to type ISBN manually
+      if(el) el.innerHTML = '<div style="font-size:12px;color:var(--text2);padding:6px 0">'
+        + '⚠️ Code-barres non détecté automatiquement.<br>'
+        + 'Entrez l’ISBN manuellement dans la barre de recherche.</div>';
+      scanInput.value = '';
+    }
+  });
+})();
+
 // ════════════════════════════════════════════
 // SERVICE WORKER
 // ════════════════════════════════════════════
@@ -2733,6 +2883,7 @@ if('serviceWorker' in navigator) {
     if(splash) splash.classList.remove('active');
     if(auth)   auth.classList.remove('active');
     showScreen('lectures');
+    trackAppSession();
     setTimeout(checkBadgesIfNeeded, 1000);
     setTimeout(checkAllNotifications, 2000);
     setTimeout(syncPublicProfile, 3000);
@@ -2790,6 +2941,14 @@ if('serviceWorker' in navigator) {
 
   // ── DOM ready ──
   document.addEventListener('DOMContentLoaded', function() {
+
+    // Splash greeting
+    var greetings = [
+      'Bonne lecture 📚', 'Quel livre aujourd’hui ? 🤔', 'Continuez votre aventure 🚀',
+      'Votre prochain coup de cœur vous attend 💖', 'Un livre, mille univers ✨'
+    ];
+    var sg = document.getElementById('splash-greeting');
+    if(sg) sg.textContent = greetings[Math.floor(Math.random() * greetings.length)];
 
     // Init photo modal listeners
     if(typeof _initPhotoListeners === 'function') _initPhotoListeners();

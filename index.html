@@ -512,23 +512,22 @@ window._signOut = async () => {
   localStorage.removeItem('lv_uid');
 };
 
-// ── Session check rapide ──
+// ── Session check rapide (avant DOM) ──
+// Note: onAuthStateChange est le mécanisme principal.
+// Ce check inline sert uniquement à accélérer le démarrage sur reconnexion.
 (async function(){
   if(localStorage.getItem('lv_guest')==='1'){ window._guestMode=true; return; }
   try {
+    // Use getSession which reads from localStorage — instant, no network
     const { data: { session } } = await _supa.auth.getSession();
     if(session) {
+      // Session found in storage — mark ready immediately
+      // onAuthStateChange will fire INITIAL_SESSION and handle full profile load
       localStorage.setItem('lv_uid', session.user.id);
-      const { data: profile } = await _supa.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-      if(profile) {
-        localStorage.setItem('lv_username', profile.pseudo || 'Lecteur');
-        localStorage.setItem('lv_mycode', profile.code || '');
-        if(profile.avatar) localStorage.setItem('lv_avatar', profile.avatar);
-      }
-      await cloudLoad(session.user.id);
       window._sessionReady = true;
     }
-  } catch(e) { console.warn(e); }
+    // If no session: onAuthStateChange will fire INITIAL_SESSION with null session
+  } catch(e) { console.warn('Pre-DOM session check:', e); }
 })();
 </script>
 
@@ -939,6 +938,8 @@ let filter='tous', note=0, editId=null, detailBook=null, recoBook=null, isCoup=f
 // ════════════════════════════════════════════
 function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
 function $id(id){return document.getElementById(id)}
+// Safe addEventListener helper — skips if element not found
+function $on(id,event,fn){var el=document.getElementById(id);if(el)el.addEventListener(event,fn);}
 const COLORS=['#3d2a6a','#2a3d6a','#2a6a4a','#6a2a3d','#4a3d2a','#2a4a6a','#5a2a6a','#2a6a5a'];
 function bookColor(t){let h=0;for(const c of(t||''))h=(h*31+c.charCodeAt(0))%COLORS.length;return COLORS[Math.abs(h)]}
 function starsHTML(n){return'⭐'.repeat(n||0)}
@@ -1064,159 +1065,164 @@ function openGoalModal(){
   $id('goal-input').value=g.target||'';
   $id('modal-goal').classList.add('open');
 }
-$id('goal-cancel').addEventListener('click',()=>$id('modal-goal').classList.remove('open'));
-$id('goal-save').addEventListener('click',()=>{
-  const t=parseInt($id('goal-input').value);
-  if(!t||t<1){toast('⚠️ Entrez un nombre valide');return;}
-  DB.saveGoal({target:t,year:new Date().getFullYear()});
-  $id('modal-goal').classList.remove('open');
-  toast('🎯 Objectif enregistré !');
-  renderDashboard();
-});
-
-// ════════════════════════════════════════════
-// SHELF
-// ════════════════════════════════════════════
-function renderShelf(){
-  const books=DB.books();
-  const sections=[{label:'📚 Lus',filter:b=>b.statut==='Lu'},{label:'📖 En cours',filter:b=>b.statut==='En cours'},{label:'🔖 À lire',filter:b=>b.statut==='À lire'}];
-  $id('shelf-content').innerHTML=sections.map(({label,filter})=>{
-    const list=books.filter(filter);
-    const booksHTML=list.length?list.map(b=>{
-      const h=20+Math.min(50,(parseInt(b.pages)||150)/10);
-      return`<div class="shelf-book" style="--color:${bookColor(b.titre)};height:${60+h}px" onclick="openDetail('${b.id}')" title="${b.titre}">
-        ${b.cover?`<img src="${b.cover}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:4px 6px 6px 4px;opacity:.75" onerror="this.remove()">`:'' }
-        <span class="spine-title">${b.titre}</span>
-      </div>`;
-    }).join(''):`<div class="shelf-empty">Aucun livre ici</div>`;
-    return`<div class="section-title">${label} <span style="font-size:12px;color:var(--text3);font-family:DM Sans">${list.length}</span></div>
-    <div class="shelf"><div class="shelf-books">${booksHTML}</div></div>`;
-  }).join('');
-}
-
-// ════════════════════════════════════════════
-// SOCIAL
-// ════════════════════════════════════════════
-async function renderSocial(){
-  const friends = DB.friends().filter(f => f.status !== 'pending');
-  const recos   = DB.recos().filter(r => r.to==='me' && !r.dismissed);
-
-  // Charger les demandes reçues depuis Supabase
-  const pending = await loadPendingRequests();
-  const totalNotifs = recos.length + pending.length;
-
-  $id('social-subtitle').textContent = friends.length + ' ami' + (friends.length!==1?'s':'');
-
-  // Notif dot
-  const dot = $id('notif-dot-wrap');
-  if(dot) dot.innerHTML = totalNotifs
-    ? 'Amis <span style="display:inline-block;width:8px;height:8px;background:var(--rose);border-radius:50%;margin-left:3px;vertical-align:middle"></span>'
-    : 'Amis';
-
-  let html = '';
-
-  // ── Demandes d’ami recues ──
-  if(pending.length) {
-    html += '<div class="section-title">🤝 Demandes d’amis <span style="background:var(--violet2);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">' + pending.length + '</span></div>';
-    pending.forEach(function(req) {
-      var pseudo = req.profiles ? req.profiles.pseudo : 'Utilisateur';
-      var rcode  = req.profiles ? req.profiles.code   : '';
-      var reqId  = req.id;
-      var reqUid = req.requester_id;
-      html += '<div class="reco-card" style="border-color:rgba(124,92,191,.3)">'
-        + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'
-        + '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;font-weight:700">' + (pseudo[0]||'?').toUpperCase() + '</div>'
-        + '<div><div style="font-size:14px;color:var(--cream);font-weight:500">' + pseudo + '</div>'
-        + '<div style="font-size:11px;color:var(--text3)">souhaite vous ajouter en ami(e)</div></div></div>'
-        + '<div class="btn-row" style="margin:0">'
-        + '<button class="btn btn-primary" style="font-size:12px;padding:9px" data-action="accept" data-fid="' + reqId + '" data-uid="' + reqUid + '" data-name="' + pseudo + '" data-code="' + rcode + '">✅ Accepter</button>'
-        + '<button class="btn btn-secondary" style="font-size:12px;padding:9px" data-action="decline" data-fid="' + reqId + '" data-name="' + pseudo + '">✕ Refuser</button>'
-        + '</div></div>';
-    });
-  }
-
-  // ── Recommandations reçues ──
-  if(recos.length){
-    html += '<div class="section-title">💌 Recommandations <span style="background:var(--rose);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">' + recos.length + '</span></div>';
-    recos.forEach(function(r){
-      const coverHtml = r.book.cover ? '<img src="' + r.book.cover + '" onerror="this.remove()">' : '📖';
-      const msgHtml   = r.msg ? '<div style="font-size:12px;font-style:italic;color:var(--text2);margin-top:4px">"' + r.msg + '"</div>' : '';
-      html += '<div class="reco-card">'
-        + '<div style="font-size:10px;color:var(--rose2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;font-weight:600">💌 ' + r.fromName + ' recommande :</div>'
-        + '<div style="display:flex;gap:10px;align-items:center">'
-        + '<div class="book-cover" style="background:' + bookColor(r.book.titre) + ';width:44px;height:66px">' + coverHtml + '</div>'
-        + '<div style="flex:1"><div style="font-family:Fraunces,serif;color:var(--cream)">' + r.book.titre + '</div>'
-        + '<div style="font-size:12px;color:var(--text2)">' + (r.book.auteur||'—') + '</div>' + msgHtml + '</div></div>'
-        + '<div class="btn-row" style="margin-top:10px">'
-        + '<button class="btn btn-secondary" style="font-size:11px;padding:8px" data-action="add-reco" data-rid="' + r.id + '">📚 Ajouter à ma liste</button>'
-        + '<button class="btn btn-secondary" style="font-size:11px;padding:8px;flex:0;padding:8px 12px" data-action="dismiss-reco" data-rid="' + r.id + '">✕</button>'
-        + '</div></div>';
-    });
-  }
-
-  // ── Demandes envoyées en attente ──
-  const sent = DB.friends().filter(f => f.status === 'pending');
-  if(sent.length) {
-    html += '<div class="sec-title" style="font-size:13px;color:var(--text3);margin:14px 0 8px">⏳ Demandes envoyées</div>';
-    sent.forEach(function(f){
-      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:12px;margin-bottom:8px;opacity:.7">'
-        + '<div style="width:36px;height:36px;border-radius:50%;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text3)">⏳</div>'
-        + '<div style="flex:1"><div style="font-size:13px;color:var(--text2)">' + f.name + '</div><div style="font-size:10px;color:var(--text3)">En attente d’acceptation</div></div>'
-        + '<button data-action="cancel-friend" data-code="' + f.code + '" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer">Annuler</button>'
-        + '</div>';
-    });
-  }
-
-  // ── Bouton ajouter ──
-  html += '<button class="btn btn-primary" style="width:100%;margin:14px 0 10px" data-action="open-add-friend">➕ Ajouter un ami</button>';
-
-  // ── Liste amis acceptés ──
-  if(friends.length){
-    html += '<div class="section-title">👥 Mes amis</div>';
-    friends.forEach(function(f){
-      html += '<div class="friend-card">'
-        + '<div class="friend-avatar">' + (f.name[0]||'?').toUpperCase() + '</div>'
-        + '<div class="friend-info"><div class="friend-name">' + f.name + '</div><div class="friend-sub">Code : ' + f.code + '</div></div>'
-        + '<button data-action="remove-friend" data-fid="' + f.id + '" style="background:rgba(232,124,138,.12);color:var(--rose);border:1px solid rgba(232,124,138,.2);padding:6px 12px;border-radius:9px;font-size:11px;cursor:pointer">Retirer</button>'
-        + '</div>';
-    });
-  }
-
-  if(!friends.length && !recos.length && !pending.length){
-    html += '<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Pas encore d’amis</div><div class="empty-sub">Ajoutez des amis pour partager vos lectures !</div></div>';
-  }
-
-  loadExchanges().then(function(exchanges){
-    var uid=localStorage.getItem('lv_uid');
-    var inc=exchanges.filter(function(e){return e.to_id===uid&&e.status==='pending';});
-    var sent=exchanges.filter(function(e){return e.from_id===uid;});
-    var ex='';
-    if(inc.length){
-      ex+='<div class="sec-title">📦 Propositions d’échange <span style="background:var(--teal);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">'+inc.length+'</span></div>';
-      inc.forEach(function(e){
-        var cv=e.book_cover?'<img src="'+e.book_cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
-        ex+='<div class="exch-card"><div style="font-size:10px;color:var(--teal);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px">🤝 Proposition reçue</div>';
-        ex+='<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">';
-        ex+='<div style="width:40px;height:58px;border-radius:6px;background:'+bookColor(e.book_titre)+';display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;font-size:14px">'+cv+'</div>';
-        ex+='<div><div style="font-family:Fraunces,serif;color:var(--cream)">'+e.book_titre+'</div><div style="font-size:12px;color:var(--text2)">'+(e.book_auteur||'')+'</div>';
-        if(e.message)ex+='<div style="font-size:12px;font-style:italic;color:var(--text2);margin-top:4px">&ldquo;'+e.message+'&rdquo;</div>';
-        ex+='</div></div><div style="font-size:11px;color:var(--text3);margin-bottom:10px">🤝 Coordonnez-vous IRL si vous acceptez</div>';
-        ex+='<div class="btn-row" style="margin:0"><button class="btn btn-teal" style="font-size:12px;padding:9px" data-action="accept-exch" data-eid="'+e.id+'">✅ Accepter</button><button class="btn btn-secondary" style="font-size:12px;flex:0;padding:8px 12px" data-action="decline-exch" data-eid="'+e.id+'">✕</button></div></div>';
-      });
-    }
-    if(sent.length){
-      ex+='<div class="sec-title" style="font-size:13px;color:var(--text3);margin:14px 0 8px">📤 Mes propositions</div>';
-      sent.forEach(function(e){
-        var b2=e.status==='accepted'?'<span class="exch-badge exch-accepted">✅ Acceptée</span>':e.status==='declined'?'<span class="exch-badge exch-declined">❌ Refusée</span>':'<span class="exch-badge exch-pending">⏳ En attente</span>';
-        ex+='<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:12px;margin-bottom:8px"><div style="flex:1"><div style="font-size:13px;color:var(--cream)">'+e.book_titre+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+new Date(e.created_at).toLocaleDateString('fr-FR')+'</div></div>'+b2+'</div>';
-        if(e.status==='accepted')ex+='<div style="background:rgba(92,196,138,.08);border:1px solid rgba(92,196,138,.2);border-radius:10px;padding:10px;margin:-2px 0 8px;font-size:12px;color:#7de8a8">🤝 Coordonnez-vous avec votre ami pour l’échange IRL.</div>';
-      });
-    }
-    if(ex){var sc=$id('social-content');sc.innerHTML=ex+sc.innerHTML;}
+function _wireUI(){
+  // All UI event listeners — called from DOMContentLoaded to guarantee DOM exists
+  $on('goal-cancel', 'click',()=>$id('modal-goal').classList.remove('open'));
+  $on('goal-save', 'click',()=>{
+    const t=parseInt($id('goal-input').value);
+    if(!t||t<1){toast('⚠️ Entrez un nombre valide');return;}
+    DB.saveGoal({target:t,year:new Date().getFullYear()});
+    $id('modal-goal').classList.remove('open');
+    toast('🎯 Objectif enregistré !');
+    renderDashboard();
   });
-  $id('social-content').innerHTML = html;
-  // Event delegation for all social buttons
-  $id('social-content').addEventListener('click', function handler(e) {
+  
+  // ════════════════════════════════════════════
+  // SHELF
+  // ════════════════════════════════════════════
+  function renderShelf(){
+    const books=DB.books();
+    const sections=[{label:'📚 Lus',filter:b=>b.statut==='Lu'},{label:'📖 En cours',filter:b=>b.statut==='En cours'},{label:'🔖 À lire',filter:b=>b.statut==='À lire'}];
+    $id('shelf-content').innerHTML=sections.map(({label,filter})=>{
+      const list=books.filter(filter);
+      const booksHTML=list.length?list.map(b=>{
+        const h=20+Math.min(50,(parseInt(b.pages)||150)/10);
+        return`<div class="shelf-book" style="--color:${bookColor(b.titre)};height:${60+h}px" onclick="openDetail('${b.id}')" title="${b.titre}">
+          ${b.cover?`<img src="${b.cover}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:4px 6px 6px 4px;opacity:.75" onerror="this.remove()">`:'' }
+          <span class="spine-title">${b.titre}</span>
+        </div>`;
+      }).join(''):`<div class="shelf-empty">Aucun livre ici</div>`;
+      return`<div class="section-title">${label} <span style="font-size:12px;color:var(--text3);font-family:DM Sans">${list.length}</span></div>
+      <div class="shelf"><div class="shelf-books">${booksHTML}</div></div>`;
+    }).join('');
+  }
+  
+  // ════════════════════════════════════════════
+  // SOCIAL
+  // ════════════════════════════════════════════
+  async function renderSocial(){
+    const friends = DB.friends().filter(f => f.status !== 'pending');
+    const recos   = DB.recos().filter(r => r.to==='me' && !r.dismissed);
+  
+    // Charger les demandes reçues depuis Supabase
+    const pending = await loadPendingRequests();
+    const totalNotifs = recos.length + pending.length;
+  
+    $id('social-subtitle').textContent = friends.length + ' ami' + (friends.length!==1?'s':'');
+  
+    // Notif dot
+    const dot = $id('notif-dot-wrap');
+    if(dot) dot.innerHTML = totalNotifs
+      ? 'Amis <span style="display:inline-block;width:8px;height:8px;background:var(--rose);border-radius:50%;margin-left:3px;vertical-align:middle"></span>'
+      : 'Amis';
+  
+    let html = '';
+  
+    // ── Demandes d’ami recues ──
+    if(pending.length) {
+      html += '<div class="section-title">🤝 Demandes d’amis <span style="background:var(--violet2);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">' + pending.length + '</span></div>';
+      pending.forEach(function(req) {
+        var pseudo = req.profiles ? req.profiles.pseudo : 'Utilisateur';
+        var rcode  = req.profiles ? req.profiles.code   : '';
+        var reqId  = req.id;
+        var reqUid = req.requester_id;
+        html += '<div class="reco-card" style="border-color:rgba(124,92,191,.3)">'
+          + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">'
+          + '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;font-weight:700">' + (pseudo[0]||'?').toUpperCase() + '</div>'
+          + '<div><div style="font-size:14px;color:var(--cream);font-weight:500">' + pseudo + '</div>'
+          + '<div style="font-size:11px;color:var(--text3)">souhaite vous ajouter en ami(e)</div></div></div>'
+          + '<div class="btn-row" style="margin:0">'
+          + '<button class="btn btn-primary" style="font-size:12px;padding:9px" data-action="accept" data-fid="' + reqId + '" data-uid="' + reqUid + '" data-name="' + pseudo + '" data-code="' + rcode + '">✅ Accepter</button>'
+          + '<button class="btn btn-secondary" style="font-size:12px;padding:9px" data-action="decline" data-fid="' + reqId + '" data-name="' + pseudo + '">✕ Refuser</button>'
+          + '</div></div>';
+      });
+    }
+  
+    // ── Recommandations reçues ──
+    if(recos.length){
+      html += '<div class="section-title">💌 Recommandations <span style="background:var(--rose);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">' + recos.length + '</span></div>';
+      recos.forEach(function(r){
+        const coverHtml = r.book.cover ? '<img src="' + r.book.cover + '" onerror="this.remove()">' : '📖';
+        const msgHtml   = r.msg ? '<div style="font-size:12px;font-style:italic;color:var(--text2);margin-top:4px">"' + r.msg + '"</div>' : '';
+        html += '<div class="reco-card">'
+          + '<div style="font-size:10px;color:var(--rose2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;font-weight:600">💌 ' + r.fromName + ' recommande :</div>'
+          + '<div style="display:flex;gap:10px;align-items:center">'
+          + '<div class="book-cover" style="background:' + bookColor(r.book.titre) + ';width:44px;height:66px">' + coverHtml + '</div>'
+          + '<div style="flex:1"><div style="font-family:Fraunces,serif;color:var(--cream)">' + r.book.titre + '</div>'
+          + '<div style="font-size:12px;color:var(--text2)">' + (r.book.auteur||'—') + '</div>' + msgHtml + '</div></div>'
+          + '<div class="btn-row" style="margin-top:10px">'
+          + '<button class="btn btn-secondary" style="font-size:11px;padding:8px" data-action="add-reco" data-rid="' + r.id + '">📚 Ajouter à ma liste</button>'
+          + '<button class="btn btn-secondary" style="font-size:11px;padding:8px;flex:0;padding:8px 12px" data-action="dismiss-reco" data-rid="' + r.id + '">✕</button>'
+          + '</div></div>';
+      });
+    }
+  
+    // ── Demandes envoyées en attente ──
+    const sent = DB.friends().filter(f => f.status === 'pending');
+    if(sent.length) {
+      html += '<div class="sec-title" style="font-size:13px;color:var(--text3);margin:14px 0 8px">⏳ Demandes envoyées</div>';
+      sent.forEach(function(f){
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:12px;margin-bottom:8px;opacity:.7">'
+          + '<div style="width:36px;height:36px;border-radius:50%;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--text3)">⏳</div>'
+          + '<div style="flex:1"><div style="font-size:13px;color:var(--text2)">' + f.name + '</div><div style="font-size:10px;color:var(--text3)">En attente d’acceptation</div></div>'
+          + '<button data-action="cancel-friend" data-code="' + f.code + '" style="background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer">Annuler</button>'
+          + '</div>';
+      });
+    }
+  
+    // ── Bouton ajouter ──
+    html += '<button class="btn btn-primary" style="width:100%;margin:14px 0 10px" data-action="open-add-friend">➕ Ajouter un ami</button>';
+  
+    // ── Liste amis acceptés ──
+    if(friends.length){
+      html += '<div class="section-title">👥 Mes amis</div>';
+      friends.forEach(function(f){
+        html += '<div class="friend-card">'
+          + '<div class="friend-avatar">' + (f.name[0]||'?').toUpperCase() + '</div>'
+          + '<div class="friend-info"><div class="friend-name">' + f.name + '</div><div class="friend-sub">Code : ' + f.code + '</div></div>'
+          + '<button data-action="remove-friend" data-fid="' + f.id + '" style="background:rgba(232,124,138,.12);color:var(--rose);border:1px solid rgba(232,124,138,.2);padding:6px 12px;border-radius:9px;font-size:11px;cursor:pointer">Retirer</button>'
+          + '</div>';
+      });
+    }
+  
+    if(!friends.length && !recos.length && !pending.length){
+      html += '<div class="empty"><div class="empty-icon">👥</div><div class="empty-title">Pas encore d’amis</div><div class="empty-sub">Ajoutez des amis pour partager vos lectures !</div></div>';
+    }
+  
+    loadExchanges().then(function(exchanges){
+      var uid=localStorage.getItem('lv_uid');
+      var inc=exchanges.filter(function(e){return e.to_id===uid&&e.status==='pending';});
+      var sent=exchanges.filter(function(e){return e.from_id===uid;});
+      var ex='';
+      if(inc.length){
+        ex+='<div class="sec-title">📦 Propositions d’échange <span style="background:var(--teal);color:#fff;font-size:9px;padding:2px 6px;border-radius:8px;font-weight:600">'+inc.length+'</span></div>';
+        inc.forEach(function(e){
+          var cv=e.book_cover?'<img src="'+e.book_cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
+          ex+='<div class="exch-card"><div style="font-size:10px;color:var(--teal);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px">🤝 Proposition reçue</div>';
+          ex+='<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px">';
+          ex+='<div style="width:40px;height:58px;border-radius:6px;background:'+bookColor(e.book_titre)+';display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;font-size:14px">'+cv+'</div>';
+          ex+='<div><div style="font-family:Fraunces,serif;color:var(--cream)">'+e.book_titre+'</div><div style="font-size:12px;color:var(--text2)">'+(e.book_auteur||'')+'</div>';
+          if(e.message)ex+='<div style="font-size:12px;font-style:italic;color:var(--text2);margin-top:4px">&ldquo;'+e.message+'&rdquo;</div>';
+          ex+='</div></div><div style="font-size:11px;color:var(--text3);margin-bottom:10px">🤝 Coordonnez-vous IRL si vous acceptez</div>';
+          ex+='<div class="btn-row" style="margin:0"><button class="btn btn-teal" style="font-size:12px;padding:9px" data-action="accept-exch" data-eid="'+e.id+'">✅ Accepter</button><button class="btn btn-secondary" style="font-size:12px;flex:0;padding:8px 12px" data-action="decline-exch" data-eid="'+e.id+'">✕</button></div></div>';
+        });
+      }
+      if(sent.length){
+        ex+='<div class="sec-title" style="font-size:13px;color:var(--text3);margin:14px 0 8px">📤 Mes propositions</div>';
+        sent.forEach(function(e){
+          var b2=e.status==='accepted'?'<span class="exch-badge exch-accepted">✅ Acceptée</span>':e.status==='declined'?'<span class="exch-badge exch-declined">❌ Refusée</span>':'<span class="exch-badge exch-pending">⏳ En attente</span>';
+          ex+='<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg3);border-radius:12px;margin-bottom:8px"><div style="flex:1"><div style="font-size:13px;color:var(--cream)">'+e.book_titre+'</div><div style="font-size:11px;color:var(--text3);margin-top:2px">'+new Date(e.created_at).toLocaleDateString('fr-FR')+'</div></div>'+b2+'</div>';
+          if(e.status==='accepted')ex+='<div style="background:rgba(92,196,138,.08);border:1px solid rgba(92,196,138,.2);border-radius:10px;padding:10px;margin:-2px 0 8px;font-size:12px;color:#7de8a8">🤝 Coordonnez-vous avec votre ami pour l’échange IRL.</div>';
+        });
+      }
+      if(ex){var sc=$id('social-content');sc.innerHTML=ex+sc.innerHTML;}
+    });
+    $id('social-content').innerHTML = html;
+  }
+  // ── Global event delegation for social screen (attached once) ──
+  document.addEventListener('click', function(e) {
+    var sc = document.getElementById('social-content');
+    if(!sc || !sc.contains(e.target)) return;
     var btn = e.target.closest('[data-action]');
     if(!btn) return;
     var action = btn.getAttribute('data-action');
@@ -1231,8 +1237,10 @@ async function renderSocial(){
     } else if(action === 'cancel-friend') {
       cancelFriendRequest(btn.getAttribute('data-code'));
     } else if(action === 'open-add-friend') {
-      document.getElementById('modal-add-friend').classList.add('open');
-      document.getElementById('my-code-display').textContent = DB.myCode();
+      var maf = document.getElementById('modal-add-friend');
+      var mcd = document.getElementById('my-code-display');
+      if(maf) maf.classList.add('open');
+      if(mcd) mcd.textContent = DB.myCode();
     } else if(action === 'remove-friend') {
       removeFriend(btn.getAttribute('data-fid'));
     } else if(action === 'accept-exch') {
@@ -1241,1441 +1249,1464 @@ async function renderSocial(){
       declineExchange(btn.getAttribute('data-eid'));
     }
   });
-}
-
-// Placeholder pour le feed (conservé pour compatibilité)
-function buildFeed(){ return []; }
-
-function cancelFriendRequest(code) {
-  DB.saveFriends(DB.friends().filter(f => f.code !== code));
-  toast('Demande annulée');
-  renderSocial();
-}
-
-function addFromReco(id){
-  const recos=DB.recos();
-  const r=recos.find(x=>x.id===id);
-  if(!r)return;
-  const books=DB.books();
-  const book={...r.book,id:Date.now().toString(),statut:'À lire',note:null,coup:false};
-  books.unshift(book);
-  DB.saveBooks(books);
-  r.dismissed=true;
-  DB.saveRecos(recos);
-  toast('📚 Ajouté à votre liste !');
-  renderSocial();
-}
-
-function dismissReco(id){
-  const recos=DB.recos();
-  const r=recos.find(x=>x.id===id);
-  if(r)r.dismissed=true;
-  DB.saveRecos(recos);
-  renderSocial();
-}
-
-function removeFriend(id){
-  if(!confirm('Retirer cet ami ?'))return;
-  DB.saveFriends(DB.friends().filter(f=>f.id!==id));
-  toast('Ami retiré');
-  renderSocial();
-}
-
-function renderMyCode(){
-  $id('my-code-display').textContent=DB.myCode();
-}
-
-$id('copy-code-btn').addEventListener('click',()=>{
-  navigator.clipboard?.writeText(DB.myCode()).then(()=>toast('📋 Code copié !')).catch(()=>{
-    const code=DB.myCode();
-    $id('my-code-display').style.userSelect='all';
-    toast('Code : '+code);
+  
+  
+  // Placeholder pour le feed (conservé pour compatibilité)
+  function buildFeed(){ return []; }
+  
+  function cancelFriendRequest(code) {
+    DB.saveFriends(DB.friends().filter(f => f.code !== code));
+    toast('Demande annulée');
+    renderSocial();
+  }
+  
+  function addFromReco(id){
+    const recos=DB.recos();
+    const r=recos.find(x=>x.id===id);
+    if(!r)return;
+    const books=DB.books();
+    const book={...r.book,id:Date.now().toString(),statut:'À lire',note:null,coup:false};
+    books.unshift(book);
+    DB.saveBooks(books);
+    r.dismissed=true;
+    DB.saveRecos(recos);
+    toast('📚 Ajouté à votre liste !');
+    renderSocial();
+  }
+  
+  function dismissReco(id){
+    const recos=DB.recos();
+    const r=recos.find(x=>x.id===id);
+    if(r)r.dismissed=true;
+    DB.saveRecos(recos);
+    renderSocial();
+  }
+  
+  function removeFriend(id){
+    if(!confirm('Retirer cet ami ?'))return;
+    DB.saveFriends(DB.friends().filter(f=>f.id!==id));
+    toast('Ami retiré');
+    renderSocial();
+  }
+  
+  function renderMyCode(){
+    $id('my-code-display').textContent=DB.myCode();
+  }
+  
+  $on('copy-code-btn', 'click',()=>{
+    navigator.clipboard?.writeText(DB.myCode()).then(()=>toast('📋 Code copié !')).catch(()=>{
+      const code=DB.myCode();
+      $id('my-code-display').style.userSelect='all';
+      toast('Code : '+code);
+    });
   });
-});
-
-$id('share-code-btn').addEventListener('click',()=>{
-  const code=DB.myCode();
-  if(navigator.share){navigator.share({title:'Livroo — rejoins-moi !',text:`Mon code Livroo : ${code} — rejoins-moi pour partager nos lectures !`}).catch(()=>{})}
-  else{navigator.clipboard?.writeText(`Mon code Livroo : ${code}`);toast('📋 Lien copié !');}
-});
-
-$id('add-friend-cancel').addEventListener('click',()=>$id('modal-add-friend').classList.remove('open'));
-$id('add-friend-confirm').addEventListener('click', async () => {
-  const code = $id('friend-code-input').value.trim().toUpperCase();
-  const name = $id('friend-name-input').value.trim();
-  if(!code || code.length < 4){ toast('⚠️ Code invalide'); return; }
-  if(!name){ toast('⚠️ Entrez un prénom'); return; }
-  if(code === DB.myCode()){ toast("⚠️ C'est votre propre code !"); return; }
-  const friends = DB.friends();
-  if(friends.find(f => f.code === code)){ toast('⚠️ Cet ami est déjà ajouté'); return; }
-  const btn = $id('add-friend-confirm');
-  btn.textContent = '⏳…'; btn.disabled = true;
-  const uid = localStorage.getItem('lv_uid');
-  if(uid) {
-    // Connecté → envoyer via Supabase (l'ami recevra la demande)
-    const ok = await sendFriendRequest(code, name);
-    if(ok) {
+  
+  $on('share-code-btn', 'click',()=>{
+    const code=DB.myCode();
+    if(navigator.share){navigator.share({title:'Livroo — rejoins-moi !',text:`Mon code Livroo : ${code} — rejoins-moi pour partager nos lectures !`}).catch(()=>{})}
+    else{navigator.clipboard?.writeText(`Mon code Livroo : ${code}`);toast('📋 Lien copié !');}
+  });
+  
+  $on('add-friend-cancel', 'click',()=>$id('modal-add-friend').classList.remove('open'));
+  $on('add-friend-confirm', 'click', async () => {
+    const code = $id('friend-code-input').value.trim().toUpperCase();
+    const name = $id('friend-name-input').value.trim();
+    if(!code || code.length < 4){ toast('⚠️ Code invalide'); return; }
+    if(!name){ toast('⚠️ Entrez un prénom'); return; }
+    if(code === DB.myCode()){ toast("⚠️ C'est votre propre code !"); return; }
+    const friends = DB.friends();
+    if(friends.find(f => f.code === code)){ toast('⚠️ Cet ami est déjà ajouté'); return; }
+    const btn = $id('add-friend-confirm');
+    btn.textContent = '⏳…'; btn.disabled = true;
+    const uid = localStorage.getItem('lv_uid');
+    if(uid) {
+      // Connecté → envoyer via Supabase (l'ami recevra la demande)
+      const ok = await sendFriendRequest(code, name);
+      if(ok) {
+        $id('friend-code-input').value = '';
+        $id('friend-name-input').value = '';
+        $id('modal-add-friend').classList.remove('open');
+        toast('📤 Demande envoyée à ' + name + ' !');
+        checkBadgesIfNeeded();
+        renderSocial();
+      }
+    } else {
+      // Invité → local uniquement
+      friends.push({ id: Date.now().toString(), name, code, status: 'accepted' });
+      DB.saveFriends(friends);
       $id('friend-code-input').value = '';
       $id('friend-name-input').value = '';
       $id('modal-add-friend').classList.remove('open');
-      toast('📤 Demande envoyée à ' + name + ' !');
-      checkBadgesIfNeeded();
+      recordSponsor();
+      toast('✅ ' + name + ' ajouté(e) !');
       renderSocial();
     }
-  } else {
-    // Invité → local uniquement
-    friends.push({ id: Date.now().toString(), name, code, status: 'accepted' });
-    DB.saveFriends(friends);
-    $id('friend-code-input').value = '';
-    $id('friend-name-input').value = '';
-    $id('modal-add-friend').classList.remove('open');
-    recordSponsor();
-    toast('✅ ' + name + ' ajouté(e) !');
-    renderSocial();
-  }
-  btn.textContent = '✅ Ajouter'; btn.disabled = false;
-});
-
-// ════════════════════════════════════════════
-// PROFIL
-// ════════════════════════════════════════════
-function renderProfil(){
-  const books=DB.books();
-  const lus=books.filter(b=>b.statut==='Lu');
-  const coups=books.filter(b=>b.coup);
-  const quotes=DB.quotes();
-  const friends=DB.friends();
-  const badges=computeBadges(lus,coups,quotes,friends);
-
-  $id('profil-content').innerHTML=`
-    <div class="profile-banner">
-      <div class="profile-avatar" onclick="openPhotoModal()" title="Modifier la photo">${DB.avatar()?'<img src="'+DB.avatar()+'" onerror="this.remove()">':(DB.userName()[0]?.toUpperCase()||'\U0001F4DA')}<div class="avatar-edit-badge">📷</div></div>
-      <div class="profile-name">${DB.userName()}</div>
-      <div style="font-size:12px;color:var(--text3);margin-top:4px">Code : <span style="color:var(--violet3);font-weight:600">${DB.myCode()}</span></div>
-      <div class="profile-stats">
-        <div class="profile-stat"><div class="profile-stat-num">${lus.length}</div><div class="profile-stat-label">Lus</div></div>
-        <div class="profile-stat"><div class="profile-stat-num">${coups.length}</div><div class="profile-stat-label">Coups de cœur</div></div>
-        <div class="profile-stat"><div class="profile-stat-num">${friends.length}</div><div class="profile-stat-label">Amis</div></div>
-      </div>
-    </div>
-
-    <div class="section-title">🏆 Mes badges</div>
-    <div class="badges-grid">${badges.map((b,bi)=>'<div class="badge-card '+(b.unlocked?'unlocked':'locked')+'" onclick="openBadgeDetail('+bi+')" style="cursor:pointer">'+'<div class="badge-icon">'+b.icon+'</div>'+'<div class="badge-name">'+b.name+'</div>'+(b.unlocked?'<div style="font-size:9px;color:var(--teal);margin-top:3px">✅ Débloqué</div>':'<div style="font-size:9px;color:var(--text3);margin-top:3px">🔒 Verrouillé</div>')+'</div>').join('')}</div>
-
-    <div class="section-title" style="justify-content:space-between">
-      📖 Mes citations
-      <button class="btn btn-secondary" style="padding:7px 14px;font-size:12px;margin:0" onclick="$id('modal-quote').classList.add('open')">＋ Ajouter</button>
-    </div>
-    ${quotes.length?quotes.map((q,i)=>`
-      <div class="quote-card">
-        <div class="quote-mark">"</div>
-        <div class="quote-text">${q.text}</div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div class="quote-source"><strong>${q.book||'Livre inconnu'}</strong>${q.author?' · '+q.author:''}</div>
-          <button onclick="deleteQuote(${i})" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer">✕</button>
-        </div>
-      </div>`).join(''):`
-    <div class="empty"><div class="empty-icon">📝</div><div class="empty-title">Aucune citation</div><div class="empty-sub">Ajoutez vos phrases préférées ici</div></div>`}
-    <div class="section-title">🔗 Mon profil public</div>
-    <div class="card" style="padding:16px">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">Partagez votre bibliothèque avec vos amis et sur les réseaux — ils pourront découvrir vos coups de cœur et rejoindre Livroo !</div>
-      <div class="btn-row" style="margin-top:0">
-        <button class="btn btn-primary" onclick="generatePublicProfile()">👁️ Voir mon profil</button>
-        <button class="btn btn-secondary" onclick="sharePublicProfile()">📤 Partager</button>
-      </div>
-    </div>
-
-    <div class="section-title">📣 Programme Ambassadeur</div>
-    <div class="card" style="padding:16px;background:linear-gradient(135deg,rgba(232,197,106,.08),rgba(124,92,191,.08));border-color:rgba(232,197,106,.2)">
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
-        <div style="font-size:36px">${parseInt(localStorage.getItem('lv_sponsored')||'0')>=5?'🌍':parseInt(localStorage.getItem('lv_sponsored')||'0')>=1?'📣':'🤝'}</div>
-        <div>
-          <div style="font-family:Fraunces,serif;font-size:16px;color:var(--cream)">${parseInt(localStorage.getItem('lv_sponsored')||'0')>=5?'Super Ambassadeur !':parseInt(localStorage.getItem('lv_sponsored')||'0')>=1?'Ambassadeur Livroo':'Devenez Ambassadeur'}</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:3px">${parseInt(localStorage.getItem('lv_sponsored')||'0')} ami${parseInt(localStorage.getItem('lv_sponsored')||'0')>1?'s':''} parrainé${parseInt(localStorage.getItem('lv_sponsored')||'0')>1?'s':''}</div>
-        </div>
-      </div>
-      <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px">Parrainez des amis avec votre code <strong style="color:var(--violet3)">${DB.myCode()}</strong> — débloquez les badges Ambassadeur et Super Ambassadeur !</div>
-      <div style="display:flex;gap:6px">
-        <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
-          <div style="height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:3px;width:${Math.min(100,parseInt(localStorage.getItem('lv_sponsored')||'0')/5*100)}%;transition:width .8s ease"></div>
-        </div>
-        <div style="font-size:10px;color:var(--text3)">${parseInt(localStorage.getItem('lv_sponsored')||'0')}/5</div>
-      </div>
-      <button class="btn btn-gold" style="width:100%;margin-top:12px" onclick="shareInviteCode()">🎁 Partager mon code d\'invitation</button>
-    </div>
-    <button class="btn btn-danger" style="width:100%;margin-top:18px" onclick="doLogout()">🚪 Se déconnecter</button>
-  <button class="btn btn-secondary" style="width:100%;margin-top:10px;border-color:rgba(232,197,106,.3);color:var(--gold2)" onclick="setupNotifications()" id="notif-setup-btn">🔔 Activer les notifications</button>
-  `;
-  // Update notif button text after render
-  setTimeout(function(){
-    var nb = document.getElementById('notif-setup-btn');
-    if(nb && localStorage.getItem('lv_notifs_enabled')) nb.innerHTML = '🔔 Notifications activées ✅';
-  }, 50);
-}
-
-function computeBadges(lus,coups,quotes,friends){
-  const days=daysSinceJoin();
-  const sponsored=parseInt(localStorage.getItem('lv_sponsored')||'0');
-  const pg=lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0);
-  const gen=[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length;
-  const goal=DB.goal();
-  return[
-    {icon:'📖',name:'Premier livre',     unlocked:lus.length>=1,id:'first',   cond:'Marquer 1 livre comme Lu',              how:'Ajoutez un livre et passez son statut en Lu',                prog:lus.length+'/1'},
-    {icon:'📚',name:'5 livres lus',      unlocked:lus.length>=5,id:'five',    cond:'Marquer 5 livres comme Lus',             how:'Continuez à lire !',                                    prog:lus.length+'/5'},
-    {icon:'🏆',name:'10 livres lus',     unlocked:lus.length>=10,id:'ten',     cond:'Marquer 10 livres comme Lus',            how:'Continuez à lire !',                                    prog:lus.length+'/10'},
-    {icon:'🌟',name:'20 livres lus',     unlocked:lus.length>=20,id:'twenty',  cond:'Marquer 20 livres comme Lus',            how:'Continuez à lire !',                                    prog:lus.length+'/20'},
-    {icon:'💖',name:'Coup de cœur',      unlocked:coups.length>=1,id:'coup',    cond:'Marquer 1 livre Coup de cœur',      how:'Modifiez un livre et activez le ♥ Oui',                  prog:coups.length+'/1'},
-    {icon:'👥',name:'Premier ami',       unlocked:friends.length>=1,id:'friend',  cond:'Ajouter 1 ami',                          how:'Onglet Amis → Ajouter un ami',                          prog:friends.length+'/1'},
-    {icon:'🤝',name:'5 amis',            unlocked:friends.length>=5,id:'friends5',cond:'Avoir 5 amis',                           how:'Partagez votre code d’invitation',                      prog:friends.length+'/5'},
-    {icon:'📣',name:'Ambassadeur',       unlocked:sponsored>=1,  desc:'A parrainé au moins 1 ami',id:'ambass',  cond:'Parrainer 1 ami',                        how:'Votre ami entre votre code pour vous ajouter',               prog:sponsored+'/1'},
-    {icon:'🌍',name:'Super Ambassadeur', unlocked:sponsored>=5,  desc:'A parrainé 5 amis ou plus',id:'super',   cond:'Parrainer 5 amis',                       how:'Partagez votre code au maximum',                             prog:sponsored+'/5'},
-    {icon:'📝',name:'Citateur',          unlocked:quotes.length>=1,id:'quote',   cond:'Sauvegarder 1 citation',                 how:'Profil → Citations → + Ajouter',                   prog:quotes.length+'/1'},
-    {icon:'⭐',name:'Critique',          unlocked:lus.filter(b=>b.note>=4).length>=3,id:'critic',  cond:'3 livres notés 4+ étoiles',    how:'Notez vos livres avec 4 ou 5 étoiles',                   prog:lus.filter(b=>b.note>=4).length+'/3'},
-    {icon:'🌍',name:'Explorateur',       unlocked:[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length>=4,id:'explorer',cond:'Lire dans 4 genres différents',     how:'Ajoutez des livres de genres variés',                    prog:gen+'/4'},
-    {icon:'🎯',name:'Objectif atteint',  unlocked:(()=>{const g=DB.goal();return g.target&&lus.length>=g.target;})(),id:'goal',    cond:'Atteindre votre objectif annuel',        how:'Stats → Définir un objectif et le compléter', prog:lus.length+'/'+(goal.target||'?')},
-    {icon:'📅',name:'1 semaine',         unlocked:days>=7,id:'week',    cond:'7 jours sur Livroo',                     how:'Revenez chaque jour !',                                       prog:Math.min(days,7)+'/7 j'},
-    {icon:'🗓️',name:'1 mois',            unlocked:days>=30,id:'month',   cond:'30 jours sur Livroo',                    how:'Fidélité récompensée !',                  prog:Math.min(days,30)+'/30 j'},
-    {icon:'🏅',name:'3 mois',            unlocked:days>=90,id:'months3', cond:'90 jours sur Livroo',                    how:'Vous êtes un pilier de la communauté !',             prog:Math.min(days,90)+'/90 j'},
-    {icon:'🎂',name:'1 an',              unlocked:days>=365,id:'year',    cond:'365 jours sur Livroo',                   how:'Légende Livroo !',                                       prog:Math.min(days,365)+'/365 j'},
-    {icon:'📄',name:'1 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=1000,id:'p1000',   cond:'Lire 1 000 pages au total',              how:'Renseignez les pages de vos livres lus',                      prog:pg+'/1000'},
-    {icon:'📰',name:'5 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=5000,id:'p5000',   cond:'Lire 5 000 pages au total',              how:'Continuez à lire !',                                    prog:pg+'/5000'},
-    {icon:'🔗',name:'Profil partagé',    unlocked:!!localStorage.getItem('lv_profile_shared'),id:'share',   cond:'Partager son profil public',             how:'Profil → Mon profil public → Partager',             prog:localStorage.getItem('lv_profile_shared')?'Fait':'À faire'},
-  ];
-}
-
-
-// Badge detail modal
-function openBadgeDetail(idx){
-  var lus=DB.books().filter(function(b){return b.statut==='Lu';});
-  var coups=DB.books().filter(function(b){return b.coup;});
-  var badges=computeBadges(lus,coups,DB.quotes(),DB.friends());
-  var b=badges[idx]; if(!b)return;
-  var DESCS={
-    'first':   'Vous avez franchi le premier pas : un livre lu, une histoire vécue. Toute grande bibliothèque commence par un seul livre.',
-    'five':    'Cinq livres au compteur ! Vous avez déjà voyagé dans plusieurs univers et accumulé des heures bien méritées.',
-    'ten':     'Dix livres ! La plupart des gens ne lisent que 4 livres par an — vous les dépassez déjà largement.',
-    'twenty':  'Vingt livres ! Un accomplissement remarquable. Vous faites partie des grands lecteurs de Livroo.',
-    'coup':    'Ces livres qui nous marquent vraiment méritent une place à part. Votre premier coup de cœur est enregistré pour toujours.',
-    'friend':  'La lecture est encore meilleure quand on la partage. Bienvenue dans la dimension sociale de Livroo !',
-    'friends5':'Cinq amis sur Livroo, c’est un véritable cercle de lecture. Vos échanges vont s’enrichir mutuellement.',
-    'ambass':  'Vous avez convaincu quelqu’un de rejoindre Livroo. Merci de faire grandir notre communauté !',
-    'super':   'Cinq personnes ont rejoint Livroo grâce à vous. Vous êtes un véritable pilier de la communauté.',
-    'quote':   'Une phrase qui vous a touché(e), méritée d’être relue. Vos citations sont un journal intime de vos émotions.',
-    'critic':  'Trois livres notés 4★ ou plus : vous savez reconnaître la qualité et n’hésitez pas à l’exprimer.',
-    'explorer':'Thriller, romance, sci-fi… Vous refusez de vous enfermer dans un seul genre. Bravo pour votre curiosité !',
-    'goal':    'Fixer un objectif et l’atteindre, c’est la marque des grands lecteurs disciplinés. Félicitations !',
-    'week':    'Les bonnes habitudes se construisent petit à petit. Une semaine sur Livroo, vous êtes sur la bonne voie.',
-    'month':   'Un mois de fidélité ! Livroo est devenu une partie de votre quotidien. Merci de faire partie de l’aventure.',
-    'months3': 'Trois mois ! Vous êtes l’un(e) des membres les plus fidèles. Votre engagement inspire les nouveaux venus.',
-    'year':    'Un an sur Livroo ! Vous avez traversé toutes les saisons avec vos livres. Légende vivante de la communauté.',
-    'p1000':   'Mille pages, c’est l’équivalent de 3 à 4 romans entiers. Vos yeux ont parcouru des mondes imaginaires.',
-    'p5000':   'Cinq mille pages ! Vous pourriez presque écrire votre propre roman avec tout ce que vous avez lu. Extraordinaire.',
-    'share':   'Votre bibliothèque est visible par le monde. Vous inspirez peut-être déjà quelqu’un à lire son prochain livre favori.'
-  };
-  var dates=DB.get('lv_badge_dates',{});
-  var ds=dates[b.id]?(' le '+new Date(dates[b.id]).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})):'';
-  var desc=DESCS[b.id]||'';
-  var html='<div style="font-size:56px;margin-bottom:12px;'+(b.unlocked?'':'filter:grayscale(1);opacity:.35')+'">'+b.icon+'</div>'
-    +'<div style="font-family:Fraunces,serif;font-size:21px;color:var(--cream);margin-bottom:8px">'+b.name+'</div>'
-    +'<div style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:18px;'
-    +(b.unlocked
-      ? 'background:rgba(232,197,106,.15);color:var(--gold2);border:1px solid rgba(232,197,106,.3)">✅ Débloqué'+ds
-      : 'background:rgba(80,72,112,.3);color:var(--text3);border:1px solid var(--border)">🔒 Verrouillé')
-    +'</div>';
-  if(desc)html+='<div style="background:linear-gradient(135deg,rgba(124,92,191,.1),rgba(92,196,176,.08));border:1px solid rgba(124,92,191,.2);border-radius:14px;padding:16px;text-align:left;margin-bottom:12px"><div style="font-size:12px;font-style:italic;color:var(--text2);line-height:1.75">'+desc+'</div></div>';
-  html+='<div style="background:var(--bg3);border-radius:12px;padding:13px 14px;text-align:left;margin-bottom:10px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Condition</div><div style="font-size:13px;color:var(--text);font-weight:500">'+(b.cond||b.name)+'</div></div>';
-  if(!b.unlocked&&b.how)html+='<div style="background:rgba(92,196,176,.07);border:1px solid rgba(92,196,176,.18);border-radius:12px;padding:13px 14px;text-align:left;margin-bottom:10px"><div style="font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Comment l’obtenir</div><div style="font-size:13px;color:var(--text)">'+b.how+'</div></div>';
-  if(b.prog){
-    var parts=String(b.prog).split('/');
-    var cur=parseFloat(parts[0])||0, tot=parseFloat(parts[1]);
-    var pct=tot>0?Math.min(100,Math.round(cur/tot*100)):b.unlocked?100:0;
-    html+='<div style="background:var(--bg3);border-radius:12px;padding:13px 14px;text-align:left"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Progression</div><div style="font-size:14px;color:'+(b.unlocked?'var(--teal)':'var(--violet2)')+';font-family:Fraunces,serif;font-weight:600">'+b.prog+'</div></div><div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(b.unlocked?'var(--teal)':'var(--violet2)')+';border-radius:3px;transition:width .6s ease"></div></div></div>';
-  }
-  document.getElementById('badge-detail-content').innerHTML=html;
-  document.getElementById('modal-badge').classList.add('open');
-}
-function saveBadgeDates(badges){
-  var dates=DB.get('lv_badge_dates',{});var upd=false;
-  badges.forEach(function(b){if(b.unlocked&&b.id&&!dates[b.id]){dates[b.id]=new Date().toISOString();upd=true;}});
-  if(upd)DB.set('lv_badge_dates',dates);
-}
-
-// Track sponsored friends (incremented when a friend uses your code)
-function recordSponsor() {
-  const n = parseInt(localStorage.getItem('lv_sponsored')||'0') + 1;
-  localStorage.setItem('lv_sponsored', n.toString());
-  checkBadgesIfNeeded();
-}
-
-function daysSinceJoin() {
-  let v = localStorage.getItem('lv_joined_at');
-  if(!v){ v = Date.now().toString(); localStorage.setItem('lv_joined_at',v); }
-  return Math.floor((Date.now()-parseInt(v))/86400000);
-}
-
-function deleteQuote(i){
-  const q=DB.quotes();q.splice(i,1);DB.saveQuotes(q);toast('Citation supprimée');renderProfil();
-}
-
-$id('quote-cancel').addEventListener('click',()=>$id('modal-quote').classList.remove('open'));
-$id('quote-save').addEventListener('click',()=>{
-  const text=$id('q-text').value.trim();
-  if(!text){toast('⚠️ Entrez une citation');return;}
-  const q=DB.quotes();
-  q.unshift({text,book:$id('q-book').value.trim(),author:$id('q-author').value.trim()});
-  DB.saveQuotes(q);
-  $id('q-text').value='';$id('q-book').value='';$id('q-author').value='';
-  $id('modal-quote').classList.remove('open');
-  toast('📝 Citation enregistrée !');
-  renderProfil();
-});
-
-// ════════════════════════════════════════════
-// DETAIL
-// ════════════════════════════════════════════
-function openDetail(id){
-  const book=DB.books().find(b=>b.id===id);
-  if(!book)return;
-  detailBook=book;
-  $id('detail-content').innerHTML=`
-    <div class="detail-cover" style="background:${bookColor(book.titre)}">
-      ${book.cover?`<img src="${book.cover}" onerror="this.remove()">`:'📖'}
-    </div>
-    <div class="detail-title">${book.titre||'Sans titre'}</div>
-    <div class="detail-author">${book.auteur||'Auteur inconnu'}</div>
-    <div style="text-align:center;margin-bottom:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-      ${statusBadge(book.statut)}
-      ${book.coup?'<span class="badge badge-coup">💖 Coup de cœur</span>':''}
-      ${book.note?`<span style="color:var(--gold)">${starsHTML(book.note)}</span>`:''}
-    </div>
-    <div class="detail-grid">
-      ${book.genre?`<div class="detail-item"><div class="detail-key">Genre</div><div class="detail-val">${book.genre}</div></div>`:''}
-      ${book.pages?`<div class="detail-item"><div class="detail-key">Pages</div><div class="detail-val">${book.pages}</div></div>`:''}
-      ${book.editeur?`<div class="detail-item"><div class="detail-key">Éditeur</div><div class="detail-val">${book.editeur}</div></div>`:''}
-      ${book.date?`<div class="detail-item"><div class="detail-key">Lu le</div><div class="detail-val">${fmtDate(book.date)}</div></div>`:''}
-    </div>
-    ${book.resume?`<div class="resume-box">${book.resume}</div>`:''}
-    ${book.citation?`<div class="quote-card" style="margin-bottom:0"><div class="quote-mark">"</div><div class="quote-text">${book.citation}</div><div class="quote-source">Citation de ce livre</div></div>`:''}
-  `;
-  const hasFriends=DB.friends().length>0;
-  $id('detail-reco-row').style.display=hasFriends&&book.statut==='Lu'?'flex':'none';
-  $id('modal-detail').classList.add('open');
-}
-
-$id('detail-close').addEventListener('click',()=>$id('modal-detail').classList.remove('open'));
-$id('detail-edit').addEventListener('click',()=>{$id('modal-detail').classList.remove('open');openEdit(detailBook)});
-$id('modal-detail').addEventListener('click',e=>{if(e.target===$id('modal-detail'))$id('modal-detail').classList.remove('open')});
-$id('detail-reco').addEventListener('click',()=>{$id('modal-detail').classList.remove('open');openRecoModal(detailBook)});
-
-// ════════════════════════════════════════════
-// RECO
-// ════════════════════════════════════════════
-function openRecoModal(book){
-  recoBook=book;
-  const friends=DB.friends();
-  $id('reco-book-info').innerHTML=`<div style="display:flex;gap:12px;align-items:center;padding:12px;background:var(--bg3);border-radius:12px">
-    <div style="width:44px;height:64px;border-radius:7px;background:${bookColor(book.titre)};display:flex;align-items:center;justify-content:center;overflow:hidden">${book.cover?`<img src="${book.cover}" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">`:'📖'}</div>
-    <div><div style="font-family:Fraunces,serif;color:var(--cream)">${book.titre}</div><div style="font-size:12px;color:var(--text2)">${book.auteur||''}</div></div>
-  </div>`;
-  $id('reco-msg').value='';
-  $id('reco-friends-list').innerHTML=friends.map(f=>`
-    <label style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg3);border-radius:12px;margin-bottom:8px;cursor:pointer">
-      <input type="checkbox" class="reco-friend-check" data-id="${f.id}" data-name="${f.name}" style="width:18px;height:18px;accent-color:var(--violet2)">
-      <div class="friend-avatar" style="width:36px;height:36px;font-size:16px">${f.name[0]?.toUpperCase()}</div>
-      <span style="color:var(--cream)">${f.name}</span>
-    </label>`).join('');
-  $id('modal-reco').classList.add('open');
-}
-
-$id('reco-cancel').addEventListener('click',()=>$id('modal-reco').classList.remove('open'));
-$id('reco-send').addEventListener('click',()=>{
-  const checked=[...$id('reco-friends-list').querySelectorAll('.reco-friend-check:checked')];
-  if(!checked.length){toast('⚠️ Sélectionnez au moins un ami');return;}
-  const msg=$id('reco-msg').value.trim();
-  const recos=DB.recos();
-  checked.forEach(c=>{
-    recos.push({id:Date.now().toString()+Math.random(),to:'me',fromName:DB.userName(),fromId:c.dataset.id,book:recoBook,msg,ts:Date.now(),dismissed:false});
+    btn.textContent = '✅ Ajouter'; btn.disabled = false;
   });
-  DB.saveRecos(recos);
-  $id('modal-reco').classList.remove('open');
-  toast(`💌 Recommandé à ${checked.length} ami${checked.length>1?'s':''} !`);
-  renderSocial();
-});
-
-// ════════════════════════════════════════════
-// ADD / EDIT
-// ════════════════════════════════════════════
-function resetForm(){
-  note=0;isCoup=false;
-  ['f-titre','f-auteur','f-resume','f-citation','f-pages','f-editeur','f-cover','f-id'].forEach(id=>$id(id).value='');
-  $id('f-genre').value='';$id('f-statut').value='À lire';$id('f-date').value='';
-  $id('search-api').value='';$id('api-results').innerHTML='';
-  $id('reco-msg').value='';
-  updateStars(0);updateCoup(false);
-}
-
-function openAdd(){editId=null;resetForm();$id('modal-title').textContent='Ajouter un livre';$id('btn-delete-row').style.display='none';$id('modal-add').classList.add('open')}
-function openEdit(b){
-  editId=b.id;resetForm();
-  $id('modal-title').textContent='Modifier le livre';
-  $id('f-titre').value=b.titre||'';$id('f-auteur').value=b.auteur||'';
-  $id('f-genre').value=b.genre||'';$id('f-statut').value=b.statut||'À lire';
-  $id('f-resume').value=b.resume||'';$id('f-citation').value=b.citation||'';
-  $id('f-pages').value=b.pages||'';$id('f-date').value=b.date||'';
-  $id('f-editeur').value=b.editeur||'';$id('f-cover').value=b.cover||'';
-  $id('f-id').value=b.id;
-  $id('btn-delete-row').style.display='flex';
-  updateStars(b.note||0);updateCoup(b.coup||false);
-  $id('modal-add').classList.add('open');
-}
-
-function updateStars(n){note=n;document.querySelectorAll('.star-btn').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.v)<=n))}
-function updateCoup(v){
-  isCoup=v;
-  var yes=$id('coup-yes'), no=$id('coup-no');
-  // Active state for YES
-  yes.style.background = v ? 'linear-gradient(135deg,rgba(232,124,138,.4),rgba(232,197,106,.3))' : '';
-  yes.style.borderColor = v ? 'rgba(232,197,106,.5)' : '';
-  yes.style.color = v ? 'var(--gold2)' : '';
-  yes.style.fontWeight = v ? '600' : '';
-  // Active state for NON
-  no.style.background = !v ? 'rgba(92,196,176,.12)' : '';
-  no.style.borderColor = !v ? 'rgba(92,196,176,.3)' : '';
-  no.style.color = !v ? 'var(--teal)' : '';
-  no.style.fontWeight = !v ? '600' : '';
-}
-
-document.querySelectorAll('.star-btn').forEach(b=>b.addEventListener('click',()=>updateStars(parseInt(b.dataset.v))));
-$id('coup-yes').addEventListener('click',()=>updateCoup(true));
-$id('coup-no').addEventListener('click',()=>updateCoup(false));
-$id('fab-add').addEventListener('click',openAdd);
-$id('btn-cancel').addEventListener('click',()=>$id('modal-add').classList.remove('open'));
-$id('modal-add').addEventListener('click',e=>{if(e.target===$id('modal-add'))$id('modal-add').classList.remove('open')});
-
-$id('btn-save').addEventListener('click',()=>{
-  const titre=$id('f-titre').value.trim();
-  if(!titre){toast('⚠️ Le titre est obligatoire');return;}
-  const book={titre,auteur:$id('f-auteur').value.trim(),genre:$id('f-genre').value,statut:$id('f-statut').value,note:note||null,coup:isCoup,resume:$id('f-resume').value.trim(),citation:$id('f-citation').value.trim(),pages:$id('f-pages').value,date:$id('f-date').value,editeur:$id('f-editeur').value.trim(),cover:$id('f-cover').value};
-  const books=DB.books();
-  if(editId){book.id=editId;const i=books.findIndex(b=>b.id===editId);if(i>=0)books[i]=book;DB.saveBooks(books);toast('✅ Livre mis à jour !')}
-  else{book.id=Date.now().toString();books.unshift(book);DB.saveBooks(books);toast('✅ Livre ajouté !')}
-  // Auto-save citation
-  if(book.citation&&book.statut==='Lu'){
-    const quotes=DB.quotes();quotes.unshift({text:book.citation,book:book.titre,author:book.auteur});
-    DB.saveQuotes(quotes);
+  
+  // ════════════════════════════════════════════
+  // PROFIL
+  // ════════════════════════════════════════════
+  function renderProfil(){
+    const books=DB.books();
+    const lus=books.filter(b=>b.statut==='Lu');
+    const coups=books.filter(b=>b.coup);
+    const quotes=DB.quotes();
+    const friends=DB.friends();
+    const badges=computeBadges(lus,coups,quotes,friends);
+  
+    $id('profil-content').innerHTML=`
+      <div class="profile-banner">
+        <div class="profile-avatar" onclick="openPhotoModal()" title="Modifier la photo">${DB.avatar()?'<img src="'+DB.avatar()+'" onerror="this.remove()">':(DB.userName()[0]?.toUpperCase()||'\U0001F4DA')}<div class="avatar-edit-badge">📷</div></div>
+        <div class="profile-name">${DB.userName()}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">Code : <span style="color:var(--violet3);font-weight:600">${DB.myCode()}</span></div>
+        <div class="profile-stats">
+          <div class="profile-stat"><div class="profile-stat-num">${lus.length}</div><div class="profile-stat-label">Lus</div></div>
+          <div class="profile-stat"><div class="profile-stat-num">${coups.length}</div><div class="profile-stat-label">Coups de cœur</div></div>
+          <div class="profile-stat"><div class="profile-stat-num">${friends.length}</div><div class="profile-stat-label">Amis</div></div>
+        </div>
+      </div>
+  
+      <div class="section-title">🏆 Mes badges</div>
+      <div class="badges-grid">${badges.map((b,bi)=>'<div class="badge-card '+(b.unlocked?'unlocked':'locked')+'" onclick="openBadgeDetail('+bi+')" style="cursor:pointer">'+'<div class="badge-icon">'+b.icon+'</div>'+'<div class="badge-name">'+b.name+'</div>'+(b.unlocked?'<div style="font-size:9px;color:var(--teal);margin-top:3px">✅ Débloqué</div>':'<div style="font-size:9px;color:var(--text3);margin-top:3px">🔒 Verrouillé</div>')+'</div>').join('')}</div>
+  
+      <div class="section-title" style="justify-content:space-between">
+        📖 Mes citations
+        <button class="btn btn-secondary" style="padding:7px 14px;font-size:12px;margin:0" onclick="$id('modal-quote').classList.add('open')">＋ Ajouter</button>
+      </div>
+      ${quotes.length?quotes.map((q,i)=>`
+        <div class="quote-card">
+          <div class="quote-mark">"</div>
+          <div class="quote-text">${q.text}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="quote-source"><strong>${q.book||'Livre inconnu'}</strong>${q.author?' · '+q.author:''}</div>
+            <button onclick="deleteQuote(${i})" style="background:none;border:none;color:var(--text3);font-size:16px;cursor:pointer">✕</button>
+          </div>
+        </div>`).join(''):`
+      <div class="empty"><div class="empty-icon">📝</div><div class="empty-title">Aucune citation</div><div class="empty-sub">Ajoutez vos phrases préférées ici</div></div>`}
+      <div class="section-title">🔗 Mon profil public</div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">Partagez votre bibliothèque avec vos amis et sur les réseaux — ils pourront découvrir vos coups de cœur et rejoindre Livroo !</div>
+        <div class="btn-row" style="margin-top:0">
+          <button class="btn btn-primary" onclick="generatePublicProfile()">👁️ Voir mon profil</button>
+          <button class="btn btn-secondary" onclick="sharePublicProfile()">📤 Partager</button>
+        </div>
+      </div>
+  
+      <div class="section-title">📣 Programme Ambassadeur</div>
+      <div class="card" style="padding:16px;background:linear-gradient(135deg,rgba(232,197,106,.08),rgba(124,92,191,.08));border-color:rgba(232,197,106,.2)">
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+          <div style="font-size:36px">${parseInt(localStorage.getItem('lv_sponsored')||'0')>=5?'🌍':parseInt(localStorage.getItem('lv_sponsored')||'0')>=1?'📣':'🤝'}</div>
+          <div>
+            <div style="font-family:Fraunces,serif;font-size:16px;color:var(--cream)">${parseInt(localStorage.getItem('lv_sponsored')||'0')>=5?'Super Ambassadeur !':parseInt(localStorage.getItem('lv_sponsored')||'0')>=1?'Ambassadeur Livroo':'Devenez Ambassadeur'}</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:3px">${parseInt(localStorage.getItem('lv_sponsored')||'0')} ami${parseInt(localStorage.getItem('lv_sponsored')||'0')>1?'s':''} parrainé${parseInt(localStorage.getItem('lv_sponsored')||'0')>1?'s':''}</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:12px">Parrainez des amis avec votre code <strong style="color:var(--violet3)">${DB.myCode()}</strong> — débloquez les badges Ambassadeur et Super Ambassadeur !</div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+            <div style="height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));border-radius:3px;width:${Math.min(100,parseInt(localStorage.getItem('lv_sponsored')||'0')/5*100)}%;transition:width .8s ease"></div>
+          </div>
+          <div style="font-size:10px;color:var(--text3)">${parseInt(localStorage.getItem('lv_sponsored')||'0')}/5</div>
+        </div>
+        <button class="btn btn-gold" style="width:100%;margin-top:12px" onclick="shareInviteCode()">🎁 Partager mon code d\'invitation</button>
+      </div>
+      <button class="btn btn-danger" style="width:100%;margin-top:18px" onclick="doLogout()">🚪 Se déconnecter</button>
+    <button class="btn btn-secondary" style="width:100%;margin-top:10px;border-color:rgba(232,197,106,.3);color:var(--gold2)" onclick="setupNotifications()" id="notif-setup-btn">🔔 Activer les notifications</button>
+    `;
+    // Update notif button text after render
+    setTimeout(function(){
+      var nb = document.getElementById('notif-setup-btn');
+      if(nb && localStorage.getItem('lv_notifs_enabled')) nb.innerHTML = '🔔 Notifications activées ✅';
+    }, 50);
   }
-  if(book.statut==='Lu') updateLastRead();
-  $id('modal-add').classList.remove('open');renderBooks();
-});
-
-$id('btn-delete').addEventListener('click',()=>{
-  if(editId&&confirm('Supprimer ce livre ?')){
-    DB.saveBooks(DB.books().filter(b=>b.id!==editId));
-    $id('modal-add').classList.remove('open');toast('🗑️ Livre supprimé');renderBooks();
+  
+  function computeBadges(lus,coups,quotes,friends){
+    const days=daysSinceJoin();
+    const sponsored=parseInt(localStorage.getItem('lv_sponsored')||'0');
+    const pg=lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0);
+    const gen=[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length;
+    const goal=DB.goal();
+    return[
+      {icon:'📖',name:'Premier livre',     unlocked:lus.length>=1,id:'first',   cond:'Marquer 1 livre comme Lu',              how:'Ajoutez un livre et passez son statut en Lu',                prog:lus.length+'/1'},
+      {icon:'📚',name:'5 livres lus',      unlocked:lus.length>=5,id:'five',    cond:'Marquer 5 livres comme Lus',             how:'Continuez à lire !',                                    prog:lus.length+'/5'},
+      {icon:'🏆',name:'10 livres lus',     unlocked:lus.length>=10,id:'ten',     cond:'Marquer 10 livres comme Lus',            how:'Continuez à lire !',                                    prog:lus.length+'/10'},
+      {icon:'🌟',name:'20 livres lus',     unlocked:lus.length>=20,id:'twenty',  cond:'Marquer 20 livres comme Lus',            how:'Continuez à lire !',                                    prog:lus.length+'/20'},
+      {icon:'💖',name:'Coup de cœur',      unlocked:coups.length>=1,id:'coup',    cond:'Marquer 1 livre Coup de cœur',      how:'Modifiez un livre et activez le ♥ Oui',                  prog:coups.length+'/1'},
+      {icon:'👥',name:'Premier ami',       unlocked:friends.length>=1,id:'friend',  cond:'Ajouter 1 ami',                          how:'Onglet Amis → Ajouter un ami',                          prog:friends.length+'/1'},
+      {icon:'🤝',name:'5 amis',            unlocked:friends.length>=5,id:'friends5',cond:'Avoir 5 amis',                           how:'Partagez votre code d’invitation',                      prog:friends.length+'/5'},
+      {icon:'📣',name:'Ambassadeur',       unlocked:sponsored>=1,  desc:'A parrainé au moins 1 ami',id:'ambass',  cond:'Parrainer 1 ami',                        how:'Votre ami entre votre code pour vous ajouter',               prog:sponsored+'/1'},
+      {icon:'🌍',name:'Super Ambassadeur', unlocked:sponsored>=5,  desc:'A parrainé 5 amis ou plus',id:'super',   cond:'Parrainer 5 amis',                       how:'Partagez votre code au maximum',                             prog:sponsored+'/5'},
+      {icon:'📝',name:'Citateur',          unlocked:quotes.length>=1,id:'quote',   cond:'Sauvegarder 1 citation',                 how:'Profil → Citations → + Ajouter',                   prog:quotes.length+'/1'},
+      {icon:'⭐',name:'Critique',          unlocked:lus.filter(b=>b.note>=4).length>=3,id:'critic',  cond:'3 livres notés 4+ étoiles',    how:'Notez vos livres avec 4 ou 5 étoiles',                   prog:lus.filter(b=>b.note>=4).length+'/3'},
+      {icon:'🌍',name:'Explorateur',       unlocked:[...new Set(DB.books().map(b=>b.genre).filter(Boolean))].length>=4,id:'explorer',cond:'Lire dans 4 genres différents',     how:'Ajoutez des livres de genres variés',                    prog:gen+'/4'},
+      {icon:'🎯',name:'Objectif atteint',  unlocked:(()=>{const g=DB.goal();return g.target&&lus.length>=g.target;})(),id:'goal',    cond:'Atteindre votre objectif annuel',        how:'Stats → Définir un objectif et le compléter', prog:lus.length+'/'+(goal.target||'?')},
+      {icon:'📅',name:'1 semaine',         unlocked:days>=7,id:'week',    cond:'7 jours sur Livroo',                     how:'Revenez chaque jour !',                                       prog:Math.min(days,7)+'/7 j'},
+      {icon:'🗓️',name:'1 mois',            unlocked:days>=30,id:'month',   cond:'30 jours sur Livroo',                    how:'Fidélité récompensée !',                  prog:Math.min(days,30)+'/30 j'},
+      {icon:'🏅',name:'3 mois',            unlocked:days>=90,id:'months3', cond:'90 jours sur Livroo',                    how:'Vous êtes un pilier de la communauté !',             prog:Math.min(days,90)+'/90 j'},
+      {icon:'🎂',name:'1 an',              unlocked:days>=365,id:'year',    cond:'365 jours sur Livroo',                   how:'Légende Livroo !',                                       prog:Math.min(days,365)+'/365 j'},
+      {icon:'📄',name:'1 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=1000,id:'p1000',   cond:'Lire 1 000 pages au total',              how:'Renseignez les pages de vos livres lus',                      prog:pg+'/1000'},
+      {icon:'📰',name:'5 000 pages',       unlocked:lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0)>=5000,id:'p5000',   cond:'Lire 5 000 pages au total',              how:'Continuez à lire !',                                    prog:pg+'/5000'},
+      {icon:'🔗',name:'Profil partagé',    unlocked:!!localStorage.getItem('lv_profile_shared'),id:'share',   cond:'Partager son profil public',             how:'Profil → Mon profil public → Partager',             prog:localStorage.getItem('lv_profile_shared')?'Fait':'À faire'},
+    ];
   }
-});
-
-// ════════════════════════════════════════════
-// OPEN LIBRARY API
-// ════════════════════════════════════════════
-$id('search-api-btn').addEventListener('click',searchBooks);
-$id('search-api').addEventListener('keydown',e=>{if(e.key==='Enter')searchBooks()});
-
-
-// Map Google Books categories -> our genre list
-function mapGenre(categories) {
-  if(!categories || !categories.length) return '';
-  var cat = (categories[0] || '').toLowerCase();
-  if(cat.includes('thriller') || cat.includes('suspense')) return 'Thriller';
-  if(cat.includes('crime') || cat.includes('detective') || cat.includes('mystery')) return 'Policier';
-  if(cat.includes('noir') || cat.includes('dark')) return 'Roman noir';
-  if(cat.includes('romance') || cat.includes('love') || cat.includes('amour')) return 'Romance';
-  if(cat.includes('horror') || cat.includes('horreur')) return 'Horreur';
-  if(cat.includes('fantasy') || cat.includes('fantastique')) return 'Fantasy';
-  if(cat.includes('science fiction') || cat.includes('sci-fi') || cat.includes('sf')) return 'Sci-Fi';
-  if(cat.includes('biograph') || cat.includes('memoir') || cat.includes('autobiograph')) return 'Biographie';
-  if(cat.includes('self-help') || cat.includes('personal development') || cat.includes('développement')) return 'Développement personnel';
-  if(cat.includes('essay') || cat.includes('essai') || cat.includes('philosophy')) return 'Essai';
-  if(cat.includes('manga')) return 'Manga';
-  if(cat.includes('comic') || cat.includes('graphic') || cat.includes('bd')) return 'BD';
-  if(cat.includes('fiction') || cat.includes('novel') || cat.includes('roman')) return 'Roman';
-  return '';
-}
-
-let _searchResults = [];
-
-async function searchBooks(){
-  const q=$id('search-api').value.trim(); if(!q) return;
-  const el=$id('api-results');
-  el.innerHTML='<div class="loading"><div class="spinner"></div>Recherche en cours…</div>';
-  try{
-    // Fetch Google Books + Open Library in parallel
-    const [gbRes, olRes] = await Promise.allSettled([
-      fetch('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(q)+'&langRestrict=fr&maxResults=4&printType=books'),
-      fetch('https://openlibrary.org/search.json?q='+encodeURIComponent(q)+'&limit=3&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i')
-    ]);
-    const results = [];
-    // Google Books (has categories for genre detection)
-    if(gbRes.status==='fulfilled'){
-      const gb = await gbRes.value.json();
-      (gb.items||[]).forEach(function(item){
-        const info = item.volumeInfo||{};
-        results.push({
-          key:     null,
-          titre:   info.title||'',
-          auteur:  (info.authors||[])[0]||'',
-          pages:   info.pageCount||'',
-          editeur: info.publisher||'',
-          cover:   (info.imageLinks ? (info.imageLinks.thumbnail||'') : '').replace('http:','https:').replace('zoom=1','zoom=2'),
-          year:    (info.publishedDate||'').substring(0,4),
-          resume:  (info.description||'').replace(/<[^>]+>/g,'').substring(0,800),
-          genre:   mapGenre(info.categories),
-          source:  'gb'
+  
+  
+  // Badge detail modal
+  function openBadgeDetail(idx){
+    var lus=DB.books().filter(function(b){return b.statut==='Lu';});
+    var coups=DB.books().filter(function(b){return b.coup;});
+    var badges=computeBadges(lus,coups,DB.quotes(),DB.friends());
+    var b=badges[idx]; if(!b)return;
+    var DESCS={
+      'first':   'Vous avez franchi le premier pas : un livre lu, une histoire vécue. Toute grande bibliothèque commence par un seul livre.',
+      'five':    'Cinq livres au compteur ! Vous avez déjà voyagé dans plusieurs univers et accumulé des heures bien méritées.',
+      'ten':     'Dix livres ! La plupart des gens ne lisent que 4 livres par an — vous les dépassez déjà largement.',
+      'twenty':  'Vingt livres ! Un accomplissement remarquable. Vous faites partie des grands lecteurs de Livroo.',
+      'coup':    'Ces livres qui nous marquent vraiment méritent une place à part. Votre premier coup de cœur est enregistré pour toujours.',
+      'friend':  'La lecture est encore meilleure quand on la partage. Bienvenue dans la dimension sociale de Livroo !',
+      'friends5':'Cinq amis sur Livroo, c’est un véritable cercle de lecture. Vos échanges vont s’enrichir mutuellement.',
+      'ambass':  'Vous avez convaincu quelqu’un de rejoindre Livroo. Merci de faire grandir notre communauté !',
+      'super':   'Cinq personnes ont rejoint Livroo grâce à vous. Vous êtes un véritable pilier de la communauté.',
+      'quote':   'Une phrase qui vous a touché(e), méritée d’être relue. Vos citations sont un journal intime de vos émotions.',
+      'critic':  'Trois livres notés 4★ ou plus : vous savez reconnaître la qualité et n’hésitez pas à l’exprimer.',
+      'explorer':'Thriller, romance, sci-fi… Vous refusez de vous enfermer dans un seul genre. Bravo pour votre curiosité !',
+      'goal':    'Fixer un objectif et l’atteindre, c’est la marque des grands lecteurs disciplinés. Félicitations !',
+      'week':    'Les bonnes habitudes se construisent petit à petit. Une semaine sur Livroo, vous êtes sur la bonne voie.',
+      'month':   'Un mois de fidélité ! Livroo est devenu une partie de votre quotidien. Merci de faire partie de l’aventure.',
+      'months3': 'Trois mois ! Vous êtes l’un(e) des membres les plus fidèles. Votre engagement inspire les nouveaux venus.',
+      'year':    'Un an sur Livroo ! Vous avez traversé toutes les saisons avec vos livres. Légende vivante de la communauté.',
+      'p1000':   'Mille pages, c’est l’équivalent de 3 à 4 romans entiers. Vos yeux ont parcouru des mondes imaginaires.',
+      'p5000':   'Cinq mille pages ! Vous pourriez presque écrire votre propre roman avec tout ce que vous avez lu. Extraordinaire.',
+      'share':   'Votre bibliothèque est visible par le monde. Vous inspirez peut-être déjà quelqu’un à lire son prochain livre favori.'
+    };
+    var dates=DB.get('lv_badge_dates',{});
+    var ds=dates[b.id]?(' le '+new Date(dates[b.id]).toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})):'';
+    var desc=DESCS[b.id]||'';
+    var html='<div style="font-size:56px;margin-bottom:12px;'+(b.unlocked?'':'filter:grayscale(1);opacity:.35')+'">'+b.icon+'</div>'
+      +'<div style="font-family:Fraunces,serif;font-size:21px;color:var(--cream);margin-bottom:8px">'+b.name+'</div>'
+      +'<div style="display:inline-flex;align-items:center;gap:6px;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:18px;'
+      +(b.unlocked
+        ? 'background:rgba(232,197,106,.15);color:var(--gold2);border:1px solid rgba(232,197,106,.3)">✅ Débloqué'+ds
+        : 'background:rgba(80,72,112,.3);color:var(--text3);border:1px solid var(--border)">🔒 Verrouillé')
+      +'</div>';
+    if(desc)html+='<div style="background:linear-gradient(135deg,rgba(124,92,191,.1),rgba(92,196,176,.08));border:1px solid rgba(124,92,191,.2);border-radius:14px;padding:16px;text-align:left;margin-bottom:12px"><div style="font-size:12px;font-style:italic;color:var(--text2);line-height:1.75">'+desc+'</div></div>';
+    html+='<div style="background:var(--bg3);border-radius:12px;padding:13px 14px;text-align:left;margin-bottom:10px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Condition</div><div style="font-size:13px;color:var(--text);font-weight:500">'+(b.cond||b.name)+'</div></div>';
+    if(!b.unlocked&&b.how)html+='<div style="background:rgba(92,196,176,.07);border:1px solid rgba(92,196,176,.18);border-radius:12px;padding:13px 14px;text-align:left;margin-bottom:10px"><div style="font-size:10px;color:var(--teal);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Comment l’obtenir</div><div style="font-size:13px;color:var(--text)">'+b.how+'</div></div>';
+    if(b.prog){
+      var parts=String(b.prog).split('/');
+      var cur=parseFloat(parts[0])||0, tot=parseFloat(parts[1]);
+      var pct=tot>0?Math.min(100,Math.round(cur/tot*100)):b.unlocked?100:0;
+      html+='<div style="background:var(--bg3);border-radius:12px;padding:13px 14px;text-align:left"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Progression</div><div style="font-size:14px;color:'+(b.unlocked?'var(--teal)':'var(--violet2)')+';font-family:Fraunces,serif;font-weight:600">'+b.prog+'</div></div><div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+(b.unlocked?'var(--teal)':'var(--violet2)')+';border-radius:3px;transition:width .6s ease"></div></div></div>';
+    }
+    var bdc=document.getElementById('badge-detail-content');
+    var mbg=document.getElementById('modal-badge');
+    if(bdc) bdc.innerHTML=html;
+    if(mbg) mbg.classList.add('open');
+  }
+  function saveBadgeDates(badges){
+    var dates=DB.get('lv_badge_dates',{});var upd=false;
+    badges.forEach(function(b){if(b.unlocked&&b.id&&!dates[b.id]){dates[b.id]=new Date().toISOString();upd=true;}});
+    if(upd)DB.set('lv_badge_dates',dates);
+  }
+  
+  // Track sponsored friends (incremented when a friend uses your code)
+  function recordSponsor() {
+    const n = parseInt(localStorage.getItem('lv_sponsored')||'0') + 1;
+    localStorage.setItem('lv_sponsored', n.toString());
+    checkBadgesIfNeeded();
+  }
+  
+  function daysSinceJoin() {
+    let v = localStorage.getItem('lv_joined_at');
+    if(!v){ v = Date.now().toString(); localStorage.setItem('lv_joined_at',v); }
+    return Math.floor((Date.now()-parseInt(v))/86400000);
+  }
+  
+  function deleteQuote(i){
+    const q=DB.quotes();q.splice(i,1);DB.saveQuotes(q);toast('Citation supprimée');renderProfil();
+  }
+  
+  $on('quote-cancel', 'click',()=>$id('modal-quote').classList.remove('open'));
+  $on('quote-save', 'click',()=>{
+    const text=$id('q-text').value.trim();
+    if(!text){toast('⚠️ Entrez une citation');return;}
+    const q=DB.quotes();
+    q.unshift({text,book:$id('q-book').value.trim(),author:$id('q-author').value.trim()});
+    DB.saveQuotes(q);
+    $id('q-text').value='';$id('q-book').value='';$id('q-author').value='';
+    $id('modal-quote').classList.remove('open');
+    toast('📝 Citation enregistrée !');
+    renderProfil();
+  });
+  
+  // ════════════════════════════════════════════
+  // DETAIL
+  // ════════════════════════════════════════════
+  function openDetail(id){
+    const book=DB.books().find(b=>b.id===id);
+    if(!book)return;
+    detailBook=book;
+    $id('detail-content').innerHTML=`
+      <div class="detail-cover" style="background:${bookColor(book.titre)}">
+        ${book.cover?`<img src="${book.cover}" onerror="this.remove()">`:'📖'}
+      </div>
+      <div class="detail-title">${book.titre||'Sans titre'}</div>
+      <div class="detail-author">${book.auteur||'Auteur inconnu'}</div>
+      <div style="text-align:center;margin-bottom:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+        ${statusBadge(book.statut)}
+        ${book.coup?'<span class="badge badge-coup">💖 Coup de cœur</span>':''}
+        ${book.note?`<span style="color:var(--gold)">${starsHTML(book.note)}</span>`:''}
+      </div>
+      <div class="detail-grid">
+        ${book.genre?`<div class="detail-item"><div class="detail-key">Genre</div><div class="detail-val">${book.genre}</div></div>`:''}
+        ${book.pages?`<div class="detail-item"><div class="detail-key">Pages</div><div class="detail-val">${book.pages}</div></div>`:''}
+        ${book.editeur?`<div class="detail-item"><div class="detail-key">Éditeur</div><div class="detail-val">${book.editeur}</div></div>`:''}
+        ${book.date?`<div class="detail-item"><div class="detail-key">Lu le</div><div class="detail-val">${fmtDate(book.date)}</div></div>`:''}
+      </div>
+      ${book.resume?`<div class="resume-box">${book.resume}</div>`:''}
+      ${book.citation?`<div class="quote-card" style="margin-bottom:0"><div class="quote-mark">"</div><div class="quote-text">${book.citation}</div><div class="quote-source">Citation de ce livre</div></div>`:''}
+    `;
+    const hasFriends=DB.friends().length>0;
+    $id('detail-reco-row').style.display=hasFriends&&book.statut==='Lu'?'flex':'none';
+    $id('modal-detail').classList.add('open');
+  }
+  
+  $on('detail-close', 'click',()=>$id('modal-detail').classList.remove('open'));
+  $on('detail-edit', 'click',()=>{$id('modal-detail').classList.remove('open');openEdit(detailBook)});
+  $on('modal-detail', 'click',e=>{if(e.target===$id('modal-detail'))$id('modal-detail').classList.remove('open')});
+  $on('detail-reco', 'click',()=>{$id('modal-detail').classList.remove('open');openRecoModal(detailBook)});
+  $on('detail-exchange', 'click',function(){
+    $id('modal-detail').classList.remove('open');
+    if(detailBook) openExchangeModal(detailBook.id);
+  });
+  
+  // ════════════════════════════════════════════
+  // RECO
+  // ════════════════════════════════════════════
+  function openRecoModal(book){
+    recoBook=book;
+    const friends=DB.friends();
+    $id('reco-book-info').innerHTML=`<div style="display:flex;gap:12px;align-items:center;padding:12px;background:var(--bg3);border-radius:12px">
+      <div style="width:44px;height:64px;border-radius:7px;background:${bookColor(book.titre)};display:flex;align-items:center;justify-content:center;overflow:hidden">${book.cover?`<img src="${book.cover}" style="width:100%;height:100%;object-fit:cover" onerror="this.remove()">`:'📖'}</div>
+      <div><div style="font-family:Fraunces,serif;color:var(--cream)">${book.titre}</div><div style="font-size:12px;color:var(--text2)">${book.auteur||''}</div></div>
+    </div>`;
+    $id('reco-msg').value='';
+    $id('reco-friends-list').innerHTML=friends.map(f=>`
+      <label style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg3);border-radius:12px;margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" class="reco-friend-check" data-id="${f.id}" data-name="${f.name}" style="width:18px;height:18px;accent-color:var(--violet2)">
+        <div class="friend-avatar" style="width:36px;height:36px;font-size:16px">${f.name[0]?.toUpperCase()}</div>
+        <span style="color:var(--cream)">${f.name}</span>
+      </label>`).join('');
+    $id('modal-reco').classList.add('open');
+  }
+  
+  $on('reco-cancel', 'click',()=>$id('modal-reco').classList.remove('open'));
+  $on('reco-send', 'click',()=>{
+    const checked=[...$id('reco-friends-list').querySelectorAll('.reco-friend-check:checked')];
+    if(!checked.length){toast('⚠️ Sélectionnez au moins un ami');return;}
+    const msg=$id('reco-msg').value.trim();
+    const recos=DB.recos();
+    checked.forEach(c=>{
+      recos.push({id:Date.now().toString()+Math.random(),to:'me',fromName:DB.userName(),fromId:c.dataset.id,book:recoBook,msg,ts:Date.now(),dismissed:false});
+    });
+    DB.saveRecos(recos);
+    $id('modal-reco').classList.remove('open');
+    toast(`💌 Recommandé à ${checked.length} ami${checked.length>1?'s':''} !`);
+    renderSocial();
+  });
+  
+  // ════════════════════════════════════════════
+  // ADD / EDIT
+  // ════════════════════════════════════════════
+  function resetForm(){
+    note=0;isCoup=false;
+    ['f-titre','f-auteur','f-resume','f-citation','f-pages','f-editeur','f-cover','f-id'].forEach(id=>$id(id).value='');
+    $id('f-genre').value='';$id('f-statut').value='À lire';$id('f-date').value='';
+    $id('search-api').value='';$id('api-results').innerHTML='';
+    $id('reco-msg').value='';
+    updateStars(0);updateCoup(false);
+  }
+  
+  function openAdd(){editId=null;resetForm();$id('modal-title').textContent='Ajouter un livre';$id('btn-delete-row').style.display='none';$id('modal-add').classList.add('open')}
+  function openEdit(b){
+    editId=b.id;resetForm();
+    $id('modal-title').textContent='Modifier le livre';
+    $id('f-titre').value=b.titre||'';$id('f-auteur').value=b.auteur||'';
+    $id('f-genre').value=b.genre||'';$id('f-statut').value=b.statut||'À lire';
+    $id('f-resume').value=b.resume||'';$id('f-citation').value=b.citation||'';
+    $id('f-pages').value=b.pages||'';$id('f-date').value=b.date||'';
+    $id('f-editeur').value=b.editeur||'';$id('f-cover').value=b.cover||'';
+    $id('f-id').value=b.id;
+    $id('btn-delete-row').style.display='flex';
+    updateStars(b.note||0);updateCoup(b.coup||false);
+    $id('modal-add').classList.add('open');
+  }
+  
+  function updateStars(n){note=n;document.querySelectorAll('.star-btn').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.v)<=n))}
+  function updateCoup(v){
+    isCoup=v;
+    var yes=$id('coup-yes'), no=$id('coup-no');
+    // Active state for YES
+    yes.style.background = v ? 'linear-gradient(135deg,rgba(232,124,138,.4),rgba(232,197,106,.3))' : '';
+    yes.style.borderColor = v ? 'rgba(232,197,106,.5)' : '';
+    yes.style.color = v ? 'var(--gold2)' : '';
+    yes.style.fontWeight = v ? '600' : '';
+    // Active state for NON
+    no.style.background = !v ? 'rgba(92,196,176,.12)' : '';
+    no.style.borderColor = !v ? 'rgba(92,196,176,.3)' : '';
+    no.style.color = !v ? 'var(--teal)' : '';
+    no.style.fontWeight = !v ? '600' : '';
+  }
+  
+  document.querySelectorAll('.star-btn').forEach(b=>b.addEventListener('click',()=>updateStars(parseInt(b.dataset.v))));
+  $on('coup-yes', 'click',()=>updateCoup(true));
+  $on('coup-no', 'click',()=>updateCoup(false));
+  $on('fab-add', 'click',openAdd);
+  $on('btn-cancel', 'click',()=>$id('modal-add').classList.remove('open'));
+  $on('modal-add', 'click',e=>{if(e.target===$id('modal-add'))$id('modal-add').classList.remove('open')});
+  
+  $on('btn-save', 'click',()=>{
+    const titre=$id('f-titre').value.trim();
+    if(!titre){toast('⚠️ Le titre est obligatoire');return;}
+    const book={titre,auteur:$id('f-auteur').value.trim(),genre:$id('f-genre').value,statut:$id('f-statut').value,note:note||null,coup:isCoup,resume:$id('f-resume').value.trim(),citation:$id('f-citation').value.trim(),pages:$id('f-pages').value,date:$id('f-date').value,editeur:$id('f-editeur').value.trim(),cover:$id('f-cover').value};
+    const books=DB.books();
+    if(editId){book.id=editId;const i=books.findIndex(b=>b.id===editId);if(i>=0)books[i]=book;DB.saveBooks(books);toast('✅ Livre mis à jour !')}
+    else{book.id=Date.now().toString();books.unshift(book);DB.saveBooks(books);toast('✅ Livre ajouté !')}
+    // Auto-save citation
+    if(book.citation&&book.statut==='Lu'){
+      const quotes=DB.quotes();quotes.unshift({text:book.citation,book:book.titre,author:book.auteur});
+      DB.saveQuotes(quotes);
+    }
+    if(book.statut==='Lu') updateLastRead();
+    $id('modal-add').classList.remove('open');renderBooks();
+  });
+  
+  $on('btn-delete', 'click',()=>{
+    if(editId&&confirm('Supprimer ce livre ?')){
+      DB.saveBooks(DB.books().filter(b=>b.id!==editId));
+      $id('modal-add').classList.remove('open');toast('🗑️ Livre supprimé');renderBooks();
+    }
+  });
+  
+  // ════════════════════════════════════════════
+  // OPEN LIBRARY API
+  // ════════════════════════════════════════════
+  $on('search-api-btn', 'click',searchBooks);
+  $on('search-api', 'keydown',e=>{if(e.key==='Enter')searchBooks()});
+  
+  
+  // Map Google Books categories -> our genre list
+  function mapGenre(categories) {
+    if(!categories || !categories.length) return '';
+    var cat = (categories[0] || '').toLowerCase();
+    if(cat.includes('thriller') || cat.includes('suspense')) return 'Thriller';
+    if(cat.includes('crime') || cat.includes('detective') || cat.includes('mystery')) return 'Policier';
+    if(cat.includes('noir') || cat.includes('dark')) return 'Roman noir';
+    if(cat.includes('romance') || cat.includes('love') || cat.includes('amour')) return 'Romance';
+    if(cat.includes('horror') || cat.includes('horreur')) return 'Horreur';
+    if(cat.includes('fantasy') || cat.includes('fantastique')) return 'Fantasy';
+    if(cat.includes('science fiction') || cat.includes('sci-fi') || cat.includes('sf')) return 'Sci-Fi';
+    if(cat.includes('biograph') || cat.includes('memoir') || cat.includes('autobiograph')) return 'Biographie';
+    if(cat.includes('self-help') || cat.includes('personal development') || cat.includes('développement')) return 'Développement personnel';
+    if(cat.includes('essay') || cat.includes('essai') || cat.includes('philosophy')) return 'Essai';
+    if(cat.includes('manga')) return 'Manga';
+    if(cat.includes('comic') || cat.includes('graphic') || cat.includes('bd')) return 'BD';
+    if(cat.includes('fiction') || cat.includes('novel') || cat.includes('roman')) return 'Roman';
+    return '';
+  }
+  
+  let _searchResults = [];
+  
+  async function searchBooks(){
+    const q=$id('search-api').value.trim(); if(!q) return;
+    const el=$id('api-results');
+    el.innerHTML='<div class="loading"><div class="spinner"></div>Recherche en cours…</div>';
+    try{
+      // Fetch Google Books + Open Library in parallel
+      const [gbRes, olRes] = await Promise.allSettled([
+        fetch('https://www.googleapis.com/books/v1/volumes?q='+encodeURIComponent(q)+'&langRestrict=fr&maxResults=4&printType=books'),
+        fetch('https://openlibrary.org/search.json?q='+encodeURIComponent(q)+'&limit=3&fields=key,title,author_name,first_publish_year,number_of_pages_median,publisher,cover_i')
+      ]);
+      const results = [];
+      // Google Books (has categories for genre detection)
+      if(gbRes.status==='fulfilled'){
+        const gb = await gbRes.value.json();
+        (gb.items||[]).forEach(function(item){
+          const info = item.volumeInfo||{};
+          results.push({
+            key:     null,
+            titre:   info.title||'',
+            auteur:  (info.authors||[])[0]||'',
+            pages:   info.pageCount||'',
+            editeur: info.publisher||'',
+            cover:   (info.imageLinks ? (info.imageLinks.thumbnail||'') : '').replace('http:','https:').replace('zoom=1','zoom=2'),
+            year:    (info.publishedDate||'').substring(0,4),
+            resume:  (info.description||'').replace(/<[^>]+>/g,'').substring(0,800),
+            genre:   mapGenre(info.categories),
+            source:  'gb'
+          });
         });
-      });
-    }
-    // Open Library
-    if(olRes.status==='fulfilled'){
-      const ol = await olRes.value.json();
-      (ol.docs||[]).forEach(function(b){
-        if(results.length>=7) return;
-        results.push({
-          key:     b.key||'',
-          titre:   b.title||'',
-          auteur:  (b.author_name||[])[0]||'',
-          pages:   b.number_of_pages_median||'',
-          editeur: (b.publisher||[])[0]||'',
-          cover:   b.cover_i?'https://covers.openlibrary.org/b/id/'+b.cover_i+'-M.jpg':'',
-          year:    b.first_publish_year||'',
-          resume:  '',
-          genre:   '',
-          source:  'ol'
-        });
-      });
-    }
-    if(!results.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun résultat trouvé</div>';return;}
-    _searchResults = results;
-    el.innerHTML = results.map(function(b,i){
-      var genreTag = b.genre ? '<span style="font-size:10px;color:var(--teal);background:rgba(92,196,176,.12);padding:2px 7px;border-radius:8px;margin-top:2px;display:inline-block">' + b.genre + '</span>' : '';
-      return '<div class="search-result" onclick="fillFromSearch('+i+')" style="cursor:pointer">'
-        +'<div class="search-result-cover">'+(b.cover?'<img src="'+b.cover+'" onerror="this.remove()">':'📖')+'</div>'
-        +'<div class="search-result-info"><div class="search-result-title">'+(b.titre||'—')+'</div>'
-        +'<div class="search-result-author">'+(b.auteur||'Auteur inconnu')+'</div>'
-        +'<div style="font-size:11px;color:var(--text3)">'+b.year+'</div>'
-        +genreTag+'</div>'
-        +'<button class="choose-btn" onclick="event.stopPropagation();fillFromSearch('+i+')">Choisir</button></div>';
-    }).join('');
-  }catch(e){el.innerHTML='<div style="color:var(--rose);font-size:13px;padding:8px 0">Erreur de connexion</div>'}
-}
-
-async function fillFromSearch(index){
-  const book = _searchResults[index];
-  if(!book) return;
-
-  // Remplir immédiatement les champs connus
-  $id('f-titre').value   = book.titre||'';
-  $id('f-auteur').value  = book.auteur||'';
-  $id('f-pages').value   = book.pages||'';
-  $id('f-editeur').value = book.editeur||'';
-  $id('f-cover').value   = book.cover||'';
-  $id('search-api').value = '';
-
-  // Genre auto-detected
-  if(book.genre) {
-    const sel = $id('f-genre');
-    // Try to match our list
-    for(let i=0;i<sel.options.length;i++){
-      if(sel.options[i].value===book.genre){ sel.selectedIndex=i; break; }
-    }
-  }
-
-  // Google Books already has resume
-  if(book.resume) {
-    $id('f-resume').value = book.resume;
-    $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations et résumé récupérés !</div>';
-    setTimeout(()=>$id('f-titre').scrollIntoView({behavior:'smooth',block:'center'}), 100);
-    return;
-  }
-
-  // Open Library: fetch resume from Works API
-  $id('api-results').innerHTML='<div class="loading"><div class="spinner"></div>Récupération du résumé…</div>';
-  try{
-    if(book.key){
-      const workRes = await fetch('https://openlibrary.org'+book.key+'.json');
-      const workData = await workRes.json();
-      let resume = '';
-      if(workData.description){
-        resume = typeof workData.description==='string' ? workData.description : workData.description.value||'';
-      } else if(workData.notes){
-        resume = typeof workData.notes==='string' ? workData.notes : workData.notes.value||'';
       }
-      // Also try to get genre from subjects
-      if(!book.genre && workData.subjects && workData.subjects.length){
-        const detected = mapGenre([workData.subjects[0]]);
-        if(detected){
-          const sel=$id('f-genre');
-          for(let i=0;i<sel.options.length;i++){
-            if(sel.options[i].value===detected){sel.selectedIndex=i;break;}
+      // Open Library
+      if(olRes.status==='fulfilled'){
+        const ol = await olRes.value.json();
+        (ol.docs||[]).forEach(function(b){
+          if(results.length>=7) return;
+          results.push({
+            key:     b.key||'',
+            titre:   b.title||'',
+            auteur:  (b.author_name||[])[0]||'',
+            pages:   b.number_of_pages_median||'',
+            editeur: (b.publisher||[])[0]||'',
+            cover:   b.cover_i?'https://covers.openlibrary.org/b/id/'+b.cover_i+'-M.jpg':'',
+            year:    b.first_publish_year||'',
+            resume:  '',
+            genre:   '',
+            source:  'ol'
+          });
+        });
+      }
+      if(!results.length){el.innerHTML='<div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun résultat trouvé</div>';return;}
+      _searchResults = results;
+      el.innerHTML = results.map(function(b,i){
+        var genreTag = b.genre ? '<span style="font-size:10px;color:var(--teal);background:rgba(92,196,176,.12);padding:2px 7px;border-radius:8px;margin-top:2px;display:inline-block">' + b.genre + '</span>' : '';
+        return '<div class="search-result" onclick="fillFromSearch('+i+')" style="cursor:pointer">'
+          +'<div class="search-result-cover">'+(b.cover?'<img src="'+b.cover+'" onerror="this.remove()">':'📖')+'</div>'
+          +'<div class="search-result-info"><div class="search-result-title">'+(b.titre||'—')+'</div>'
+          +'<div class="search-result-author">'+(b.auteur||'Auteur inconnu')+'</div>'
+          +'<div style="font-size:11px;color:var(--text3)">'+b.year+'</div>'
+          +genreTag+'</div>'
+          +'<button class="choose-btn" onclick="event.stopPropagation();fillFromSearch('+i+')">Choisir</button></div>';
+      }).join('');
+    }catch(e){el.innerHTML='<div style="color:var(--rose);font-size:13px;padding:8px 0">Erreur de connexion</div>'}
+  }
+  
+  async function fillFromSearch(index){
+    const book = _searchResults[index];
+    if(!book) return;
+  
+    // Remplir immédiatement les champs connus
+    $id('f-titre').value   = book.titre||'';
+    $id('f-auteur').value  = book.auteur||'';
+    $id('f-pages').value   = book.pages||'';
+    $id('f-editeur').value = book.editeur||'';
+    $id('f-cover').value   = book.cover||'';
+    $id('search-api').value = '';
+  
+    // Genre auto-detected
+    if(book.genre) {
+      const sel = $id('f-genre');
+      // Try to match our list
+      for(let i=0;i<sel.options.length;i++){
+        if(sel.options[i].value===book.genre){ sel.selectedIndex=i; break; }
+      }
+    }
+  
+    // Google Books already has resume
+    if(book.resume) {
+      $id('f-resume').value = book.resume;
+      $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations et résumé récupérés !</div>';
+      setTimeout(()=>$id('f-titre').scrollIntoView({behavior:'smooth',block:'center'}), 100);
+      return;
+    }
+  
+    // Open Library: fetch resume from Works API
+    $id('api-results').innerHTML='<div class="loading"><div class="spinner"></div>Récupération du résumé…</div>';
+    try{
+      if(book.key){
+        const workRes = await fetch('https://openlibrary.org'+book.key+'.json');
+        const workData = await workRes.json();
+        let resume = '';
+        if(workData.description){
+          resume = typeof workData.description==='string' ? workData.description : workData.description.value||'';
+        } else if(workData.notes){
+          resume = typeof workData.notes==='string' ? workData.notes : workData.notes.value||'';
+        }
+        // Also try to get genre from subjects
+        if(!book.genre && workData.subjects && workData.subjects.length){
+          const detected = mapGenre([workData.subjects[0]]);
+          if(detected){
+            const sel=$id('f-genre');
+            for(let i=0;i<sel.options.length;i++){
+              if(sel.options[i].value===detected){sel.selectedIndex=i;break;}
+            }
           }
         }
+        resume = resume.replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/\r?\n/g,' ').trim();
+        if(resume.length>800) resume=resume.substring(0,800)+'…';
+        if(resume) $id('f-resume').value=resume;
+        if(!book.pages&&workData.number_of_pages) $id('f-pages').value=workData.number_of_pages;
       }
-      resume = resume.replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/\r?\n/g,' ').trim();
-      if(resume.length>800) resume=resume.substring(0,800)+'…';
-      if(resume) $id('f-resume').value=resume;
-      if(!book.pages&&workData.number_of_pages) $id('f-pages').value=workData.number_of_pages;
+      $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations récupérées'+($id('f-resume').value?' avec résumé':'')+' !</div>';
+    }catch(e){
+      $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations de base récupérées</div>';
     }
-    $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations récupérées'+($id('f-resume').value?' avec résumé':'')+' !</div>';
-  }catch(e){
-    $id('api-results').innerHTML='<div style="color:var(--teal);font-size:13px;padding:8px 0">✅ Informations de base récupérées</div>';
+    setTimeout(()=>$id('f-titre').scrollIntoView({behavior:'smooth',block:'center'}), 100);
   }
-  setTimeout(()=>$id('f-titre').scrollIntoView({behavior:'smooth',block:'center'}), 100);
-}
-
-// ════════════════════════════════════════════
-// AUTH UI LOGIC
-// ════════════════════════════════════════════
-let authMethod = 'email';
-let authMethodIn = 'email';
-let pseudoOk = false;
-let pseudoTimer = null;
-
-function switchAuthTab(tab) {
-  $id('tab-signup').classList.toggle('active', tab==='signup');
-  $id('tab-signin').classList.toggle('active', tab==='signin');
-  $id('form-signup').style.display = tab==='signup' ? '' : 'none';
-  $id('form-signin').style.display = tab==='signin' ? '' : 'none';
-  $id('auth-error').style.display = 'none';
-}
-
-function switchMethod(m) {
-  authMethod = m;
-  $id('method-email').classList.toggle('active', m==='email');
-  $id('method-phone').classList.toggle('active', m==='phone');
-  const isEmail = m === 'email';
-  $id('contact-label-up').textContent = isEmail ? 'Adresse e-mail' : 'Numéro de téléphone';
-  $id('contact-icon-up').textContent = isEmail ? '📧' : '📱';
-  $id('signup-contact').type = isEmail ? 'email' : 'tel';
-  $id('signup-contact').placeholder = isEmail ? 'votre@email.com' : '+33 6 00 00 00 00';
-}
-
-function switchMethodIn(m) {
-  authMethodIn = m;
-  $id('method-email-in').classList.toggle('active', m==='email');
-  $id('method-phone-in').classList.toggle('active', m==='phone');
-  const isEmail = m === 'email';
-  $id('contact-label-in').textContent = isEmail ? 'Adresse e-mail' : 'Numéro de téléphone';
-  $id('contact-icon-in').textContent = isEmail ? '📧' : '📱';
-  $id('signin-contact').type = isEmail ? 'email' : 'tel';
-  $id('signin-contact').placeholder = isEmail ? 'votre@email.com' : '+33 6 00 00 00 00';
-}
-
-function showAuthError(msg) {
-  const el = $id('auth-error');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-// Pseudo availability check with debounce
-async function onPseudoInput(val) {
-  const status = $id('pseudo-status');
-  const sugg = $id('pseudo-suggestions');
-  pseudoOk = false;
-  clearTimeout(pseudoTimer);
-  if (!val || val.length < 3) {
-    status.textContent = val ? '⚠️ Minimum 3 caractères' : '';
+  
+  // ════════════════════════════════════════════
+  // AUTH UI LOGIC
+  // ════════════════════════════════════════════
+  let authMethod = 'email';
+  let authMethodIn = 'email';
+  let pseudoOk = false;
+  let pseudoTimer = null;
+  
+  function switchAuthTab(tab) {
+    $id('tab-signup').classList.toggle('active', tab==='signup');
+    $id('tab-signin').classList.toggle('active', tab==='signin');
+    $id('form-signup').style.display = tab==='signup' ? '' : 'none';
+    $id('form-signin').style.display = tab==='signin' ? '' : 'none';
+    $id('auth-error').style.display = 'none';
+  }
+  
+  function switchMethod(m) {
+    authMethod = m;
+    $id('method-email').classList.toggle('active', m==='email');
+    $id('method-phone').classList.toggle('active', m==='phone');
+    const isEmail = m === 'email';
+    $id('contact-label-up').textContent = isEmail ? 'Adresse e-mail' : 'Numéro de téléphone';
+    $id('contact-icon-up').textContent = isEmail ? '📧' : '📱';
+    $id('signup-contact').type = isEmail ? 'email' : 'tel';
+    $id('signup-contact').placeholder = isEmail ? 'votre@email.com' : '+33 6 00 00 00 00';
+  }
+  
+  function switchMethodIn(m) {
+    authMethodIn = m;
+    $id('method-email-in').classList.toggle('active', m==='email');
+    $id('method-phone-in').classList.toggle('active', m==='phone');
+    const isEmail = m === 'email';
+    $id('contact-label-in').textContent = isEmail ? 'Adresse e-mail' : 'Numéro de téléphone';
+    $id('contact-icon-in').textContent = isEmail ? '📧' : '📱';
+    $id('signin-contact').type = isEmail ? 'email' : 'tel';
+    $id('signin-contact').placeholder = isEmail ? 'votre@email.com' : '+33 6 00 00 00 00';
+  }
+  
+  function showAuthError(msg) {
+    const el = $id('auth-error');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+  
+  // Pseudo availability check with debounce
+  async function onPseudoInput(val) {
+    const status = $id('pseudo-status');
+    const sugg = $id('pseudo-suggestions');
+    pseudoOk = false;
+    clearTimeout(pseudoTimer);
+    if (!val || val.length < 3) {
+      status.textContent = val ? '⚠️ Minimum 3 caractères' : '';
+      status.className = 'pseudo-status pseudo-checking';
+      sugg.innerHTML = '';
+      return;
+    }
+    if (!/^[a-zA-Z0-9_\-\.À-ÿ]+$/.test(val)) {
+      status.textContent = '⚠️ Lettres, chiffres et _ - . uniquement';
+      status.className = 'pseudo-status pseudo-taken';
+      sugg.innerHTML = '';
+      return;
+    }
+    status.textContent = '⏳ Vérification…';
     status.className = 'pseudo-status pseudo-checking';
-    sugg.innerHTML = '';
-    return;
-  }
-  if (!/^[a-zA-Z0-9_\-\.À-ÿ]+$/.test(val)) {
-    status.textContent = '⚠️ Lettres, chiffres et _ - . uniquement';
-    status.className = 'pseudo-status pseudo-taken';
-    sugg.innerHTML = '';
-    return;
-  }
-  status.textContent = '⏳ Vérification…';
-  status.className = 'pseudo-status pseudo-checking';
-  pseudoTimer = setTimeout(async () => {
-    try {
-      if (!window._checkPseudo) { pseudoOk = true; status.textContent = '✅ Disponible'; status.className = 'pseudo-status pseudo-ok'; return; }
-      const available = await window._checkPseudo(val);
-      if (available) {
-        pseudoOk = true;
-        status.textContent = '✅ Pseudo disponible !';
+    pseudoTimer = setTimeout(async () => {
+      try {
+        if (!window._checkPseudo) { pseudoOk = true; status.textContent = '✅ Disponible'; status.className = 'pseudo-status pseudo-ok'; return; }
+        const available = await window._checkPseudo(val);
+        if (available) {
+          pseudoOk = true;
+          status.textContent = '✅ Pseudo disponible !';
+          status.className = 'pseudo-status pseudo-ok';
+          sugg.innerHTML = '';
+        } else {
+          pseudoOk = false;
+          status.textContent = '❌ Ce pseudo est déjà pris';
+          status.className = 'pseudo-status pseudo-taken';
+          // Generate suggestions
+          const suggestions = [val + Math.floor(Math.random()*99+1), val + '_', val + new Date().getFullYear(), 'Le' + val, val + 'Lit'];
+          sugg.innerHTML = '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;width:100%">Suggestions :</div>' +
+            suggestions.map(s => `<span class="pseudo-chip" onclick="useSuggestion('${s}')">${s}</span>`).join('');
+        }
+      } catch(e) {
+        pseudoOk = true; // Fallback: allow if Firebase not configured yet
+        status.textContent = '✅ Disponible';
         status.className = 'pseudo-status pseudo-ok';
-        sugg.innerHTML = '';
-      } else {
-        pseudoOk = false;
-        status.textContent = '❌ Ce pseudo est déjà pris';
-        status.className = 'pseudo-status pseudo-taken';
-        // Generate suggestions
-        const suggestions = [val + Math.floor(Math.random()*99+1), val + '_', val + new Date().getFullYear(), 'Le' + val, val + 'Lit'];
-        sugg.innerHTML = '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;width:100%">Suggestions :</div>' +
-          suggestions.map(s => `<span class="pseudo-chip" onclick="useSuggestion('${s}')">${s}</span>`).join('');
       }
+    }, 600);
+  }
+  
+  function useSuggestion(s) {
+    $id('signup-pseudo').value = s;
+    onPseudoInput(s);
+  }
+  
+  async function doSignUp() {
+    const contact = $id('signup-contact').value.trim();
+    const pseudo = $id('signup-pseudo').value.trim();
+    const password = $id('signup-password').value;
+    $id('auth-error').style.display = 'none';
+  
+    if (!contact) { showAuthError('⚠️ Entrez votre ' + (authMethod==='email'?'e-mail':'numéro')); return; }
+    if (!pseudo || pseudo.length < 3) { showAuthError('⚠️ Le pseudo doit faire au moins 3 caractères'); return; }
+    if (!pseudoOk) { showAuthError('⚠️ Choisissez un pseudo disponible'); return; }
+    if (password.length < 6) { showAuthError('⚠️ Le mot de passe doit faire au moins 6 caractères'); return; }
+  
+    const btn = $id('signup-btn');
+    btn.textContent = '⏳ Création…'; btn.disabled = true;
+  
+    try {
+      await window._signUp(contact, password, pseudo);
+      toast('✨ Bienvenue, ' + pseudo + ' !');
+      // La navigation est gérée par onAuthStateChange — pas de redirect manuel
     } catch(e) {
-      pseudoOk = true; // Fallback: allow if Firebase not configured yet
-      status.textContent = '✅ Disponible';
-      status.className = 'pseudo-status pseudo-ok';
+      const msg = (e.message || '').toLowerCase();
+      let err = '⚠️ Erreur lors de la création du compte';
+      if (msg.includes('already') || msg.includes('existe')) err = '⚠️ Cet e-mail est déjà utilisé';
+      else if (msg.includes('invalid') && msg.includes('email')) err = '⚠️ Format d\'e-mail invalide';
+      else if (msg.includes('password') || msg.includes('mot de passe')) err = '⚠️ Mot de passe trop court (6 caractères min)';
+      else if (msg.includes('network') || msg.includes('fetch')) err = '⚠️ Problème de connexion internet';
+      showAuthError(err);
+    } finally { btn.textContent = '✨ Créer mon compte'; btn.disabled = false; }
+  }
+  
+  async function doSignIn() {
+    const contact = $id('signin-contact').value.trim();
+    const password = $id('signin-password').value;
+    $id('auth-error').style.display = 'none';
+    if (!contact || !password) { showAuthError('⚠️ Remplissez tous les champs'); return; }
+  
+    const signinBtn = $id('signin-btn') || { textContent:'', disabled:false };
+    signinBtn.textContent = '⏳…'; signinBtn.disabled = true;
+  
+    try {
+      localStorage.removeItem('lv_guest');
+      await window._signIn(contact, password);
+      toast('👋 Bon retour sur Livroo !');
+      // La navigation est gérée par onAuthStateChange
+    } catch(e) {
+      const msg = (e.message || '').toLowerCase();
+      let err = '⚠️ Identifiants incorrects';
+      if (msg.includes('invalid') || msg.includes('not found') || msg.includes('credentials')) err = '⚠️ E-mail ou mot de passe incorrect';
+      else if (msg.includes('too many') || msg.includes('rate')) err = '⚠️ Trop de tentatives, réessayez dans quelques minutes';
+      else if (msg.includes('network') || msg.includes('fetch')) err = '⚠️ Problème de connexion internet';
+      showAuthError(err);
+    } finally { signinBtn.textContent = '🚀 Se connecter'; signinBtn.disabled = false; }
+  }
+  
+  // ════════════════════════════════════════════
+  // MODE INVITÉ
+  // ════════════════════════════════════════════
+  function enterAsGuest() {
+    localStorage.setItem('lv_guest', '1');
+    localStorage.setItem('lv_username', 'Invité');
+    // Forcer la navigation directement (pas d'onAuthStateChange en mode invité)
+    document.getElementById('screen-auth').classList.remove('active');
+    document.getElementById('splash').classList.remove('active');
+    showScreen('lectures');
+    toast('👋 Mode invité — vos données ne seront pas sauvegardées');
+  }
+  
+  // ════════════════════════════════════════════
+  // DÉCONNEXION
+  // ════════════════════════════════════════════
+  async function doLogout() {
+    if (!confirm('Se déconnecter de Livroo ?')) return;
+    try {
+      localStorage.removeItem('lv_guest');
+      localStorage.removeItem('lv_remember');
+      // Supabase onAuthStateChange gérera la redirection vers l'écran d'auth
+      if (window._signOut) await window._signOut();
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $id('screen-auth').classList.add('active');
+      switchAuthTab('signup');
+    } catch(e) { toast('Erreur de déconnexion'); }
+  }
+  
+  function shareInviteCode() {
+    const code = DB.myCode();
+    const msg  = 'Rejoins-moi sur Livroo, l\'app pour suivre tes lectures ! Mon code d\'invitation : ' + code + ' 📚';
+    if(navigator.share) {
+      navigator.share({title:'Rejoins Livroo !', text:msg, url:window.location.href}).catch(()=>{});
+    } else {
+      navigator.clipboard?.writeText(msg).then(()=>toast('📋 Message copié !'));
     }
-  }, 600);
-}
-
-function useSuggestion(s) {
-  $id('signup-pseudo').value = s;
-  onPseudoInput(s);
-}
-
-async function doSignUp() {
-  const contact = $id('signup-contact').value.trim();
-  const pseudo = $id('signup-pseudo').value.trim();
-  const password = $id('signup-password').value;
-  $id('auth-error').style.display = 'none';
-
-  if (!contact) { showAuthError('⚠️ Entrez votre ' + (authMethod==='email'?'e-mail':'numéro')); return; }
-  if (!pseudo || pseudo.length < 3) { showAuthError('⚠️ Le pseudo doit faire au moins 3 caractères'); return; }
-  if (!pseudoOk) { showAuthError('⚠️ Choisissez un pseudo disponible'); return; }
-  if (password.length < 6) { showAuthError('⚠️ Le mot de passe doit faire au moins 6 caractères'); return; }
-
-  const btn = $id('signup-btn');
-  btn.textContent = '⏳ Création…'; btn.disabled = true;
-
-  try {
-    await window._signUp(contact, password, pseudo);
-    toast('✨ Bienvenue, ' + pseudo + ' !');
-    // La navigation est gérée par onAuthStateChange — pas de redirect manuel
-  } catch(e) {
-    const msg = (e.message || '').toLowerCase();
-    let err = '⚠️ Erreur lors de la création du compte';
-    if (msg.includes('already') || msg.includes('existe')) err = '⚠️ Cet e-mail est déjà utilisé';
-    else if (msg.includes('invalid') && msg.includes('email')) err = '⚠️ Format d\'e-mail invalide';
-    else if (msg.includes('password') || msg.includes('mot de passe')) err = '⚠️ Mot de passe trop court (6 caractères min)';
-    else if (msg.includes('network') || msg.includes('fetch')) err = '⚠️ Problème de connexion internet';
-    showAuthError(err);
-  } finally { btn.textContent = '✨ Créer mon compte'; btn.disabled = false; }
-}
-
-async function doSignIn() {
-  const contact = $id('signin-contact').value.trim();
-  const password = $id('signin-password').value;
-  $id('auth-error').style.display = 'none';
-  if (!contact || !password) { showAuthError('⚠️ Remplissez tous les champs'); return; }
-
-  const signinBtn = $id('signin-btn') || { textContent:'', disabled:false };
-  signinBtn.textContent = '⏳…'; signinBtn.disabled = true;
-
-  try {
-    localStorage.removeItem('lv_guest');
-    await window._signIn(contact, password);
-    toast('👋 Bon retour sur Livroo !');
-    // La navigation est gérée par onAuthStateChange
-  } catch(e) {
-    const msg = (e.message || '').toLowerCase();
-    let err = '⚠️ Identifiants incorrects';
-    if (msg.includes('invalid') || msg.includes('not found') || msg.includes('credentials')) err = '⚠️ E-mail ou mot de passe incorrect';
-    else if (msg.includes('too many') || msg.includes('rate')) err = '⚠️ Trop de tentatives, réessayez dans quelques minutes';
-    else if (msg.includes('network') || msg.includes('fetch')) err = '⚠️ Problème de connexion internet';
-    showAuthError(err);
-  } finally { signinBtn.textContent = '🚀 Se connecter'; signinBtn.disabled = false; }
-}
-
-// ════════════════════════════════════════════
-// MODE INVITÉ
-// ════════════════════════════════════════════
-function enterAsGuest() {
-  localStorage.setItem('lv_guest', '1');
-  localStorage.setItem('lv_username', 'Invité');
-  // Forcer la navigation directement (pas d'onAuthStateChange en mode invité)
-  document.getElementById('screen-auth').classList.remove('active');
-  document.getElementById('splash').classList.remove('active');
-  showScreen('lectures');
-  toast('👋 Mode invité — vos données ne seront pas sauvegardées');
-}
-
-// ════════════════════════════════════════════
-// DÉCONNEXION
-// ════════════════════════════════════════════
-async function doLogout() {
-  if (!confirm('Se déconnecter de Livroo ?')) return;
-  try {
-    localStorage.removeItem('lv_guest');
-    localStorage.removeItem('lv_remember');
-    // Supabase onAuthStateChange gérera la redirection vers l'écran d'auth
-    if (window._signOut) await window._signOut();
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    $id('screen-auth').classList.add('active');
-    switchAuthTab('signup');
-  } catch(e) { toast('Erreur de déconnexion'); }
-}
-
-function shareInviteCode() {
-  const code = DB.myCode();
-  const msg  = 'Rejoins-moi sur Livroo, l\'app pour suivre tes lectures ! Mon code d\'invitation : ' + code + ' 📚';
-  if(navigator.share) {
-    navigator.share({title:'Rejoins Livroo !', text:msg, url:window.location.href}).catch(()=>{});
-  } else {
-    navigator.clipboard?.writeText(msg).then(()=>toast('📋 Message copié !'));
   }
-}
-
-// ════════════════════════════════════════════
-// BADGE NOTIFICATIONS
-// ════════════════════════════════════════════
-function checkBadgesIfNeeded() {
-  const books  = DB.books();
-  const lus    = books.filter(b=>b.statut==='Lu');
-  const coups  = books.filter(b=>b.coup);
-  const quotes = DB.quotes();
-  const friends= DB.friends();
-  const all    = computeBadges(lus,coups,quotes,friends);
-  const seen   = DB.get('lv_seen_badges',[]);
-  const newOnes= all.filter(b=>b.unlocked && !seen.includes(b.name));
-  if(!newOnes.length) return;
-  const updated = [...seen, ...newOnes.map(b=>b.name)];
-  DB.set('lv_seen_badges', updated);
-  saveBadgeDates(all);
-  let delay = 0;
-  newOnes.forEach(b => {
-    setTimeout(() => showBadgeNotif(b), delay);
-    delay += 3400;
-  });
-}
-
-function showBadgeNotif(badge) {
-  // Create notif element if not present
-  let n = $id('badge-notif');
-  if(!n) {
-    n = document.createElement('div');
-    n.id = 'badge-notif';
-    n.style.cssText = 'position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,rgba(232,197,106,.97),rgba(124,92,191,.97));padding:14px 20px calc(14px + env(safe-area-inset-top,0px)) 20px;z-index:500;display:none;text-align:center;backdrop-filter:blur(10px);cursor:pointer';
-    n.innerHTML = '<span id="bni" style="font-size:32px;display:block;margin-bottom:4px"></span><div id="bnt" style="font-family:Fraunces,serif;font-size:16px;color:#fff;font-weight:700"></div><div id="bns" style="font-size:12px;color:rgba(255,255,255,.85);margin-top:3px"></div>';
-    n.onclick = () => n.style.display = 'none';
-    document.body.appendChild(n);
-  }
-  n.querySelector('#bni').textContent = badge.icon;
-  n.querySelector('#bnt').textContent = '🏆 Badge débloqué : ' + badge.name;
-  n.querySelector('#bns').textContent = badge.desc || badge.name;
-  n.style.display = 'block';
-  // Animate in
-  n.style.transform = 'translateY(-100%)';
-  n.style.transition = 'transform .4s cubic-bezier(.34,1.56,.64,1)';
-  requestAnimationFrame(() => requestAnimationFrame(() => n.style.transform = 'translateY(0)'));
-  setTimeout(() => {
-    n.style.transform = 'translateY(-100%)';
-    setTimeout(() => n.style.display='none', 400);
-  }, 3000);
-}
-
-// ════════════════════════════════════════════
-// PROFIL PUBLIC
-// ════════════════════════════════════════════
-function generatePublicProfile() {
-  const books  = DB.books();
-  const lus    = books.filter(b=>b.statut==='Lu');
-  const coups  = books.filter(b=>b.coup);
-  const badges = computeBadges(lus,coups,DB.quotes(),DB.friends()).filter(b=>b.unlocked);
-  const pages  = lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0);
-  const avg    = lus.filter(b=>b.note).length
-    ? (lus.filter(b=>b.note).reduce((s,b)=>s+b.note,0)/lus.filter(b=>b.note).length).toFixed(1)
-    : '—';
-
-  // Build shareable HTML card as data URL
-  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta property="og:title" content="${DB.userName()} sur Livroo">
-  <meta property="og:description" content="${lus.length} livres lus · ${pages.toLocaleString('fr-FR')} pages · Note moyenne ${avg}">
-  <title>${DB.userName()} — Livroo</title>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{background:linear-gradient(135deg,#0d0d1a 0%,#1a1040 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:"DM Sans",sans-serif;padding:20px}
-    .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:32px 28px;max-width:420px;width:100%;text-align:center}
-    .logo{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:3px;text-transform:uppercase;margin-bottom:20px}
-    .avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#7c5cbf,#e87c8a);display:flex;align-items:center;justify-content:center;font-size:32px;color:#fff;font-family:"Fraunces",serif;font-weight:700;margin:0 auto 14px;border:3px solid rgba(155,127,232,.4)}
-    .name{font-family:"Fraunces",serif;font-size:26px;color:#f0ecff;font-weight:700;margin-bottom:4px}
-    .sub{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:24px}
-    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
-    .stat{background:rgba(255,255,255,.06);border-radius:14px;padding:14px 8px}
-    .stat-n{font-family:"Fraunces",serif;font-size:28px;color:#9b7fe8;font-weight:700}
-    .stat-l{font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
-    .badges{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:24px}
-    .b{background:rgba(232,197,106,.1);border:1px solid rgba(232,197,106,.25);border-radius:20px;padding:5px 12px;font-size:12px;color:#f5d98a;display:flex;align-items:center;gap:5px}
-    .coups{margin-bottom:24px}
-    .coup-title{font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
-    .coup-item{display:flex;align-items:center;gap:10px;padding:9px 12px;background:rgba(255,255,255,.04);border-radius:12px;margin-bottom:7px;text-align:left}
-    .coup-cover{width:36px;height:52px;border-radius:5px;background:#2a2050;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px}
-    .coup-cover img{width:100%;height:100%;object-fit:cover}
-    .coup-t{font-size:13px;color:#f0ecff;font-weight:500}
-    .coup-a{font-size:11px;color:rgba(255,255,255,.4);margin-top:2px}
-    .cta{background:linear-gradient(135deg,#7c5cbf,#9b7fe8);border-radius:14px;padding:13px 20px;font-size:14px;font-weight:600;color:#fff;text-decoration:none;display:inline-block;margin-top:4px}
-    .coup-stars{font-size:11px;color:#e8c56a;margin-top:2px}
-  </style></head><body><div class="card">
-  <div class="logo">📚 Livroo</div>
-  <div class="avatar">${(DB.avatar()?'<img src="'+DB.avatar()+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':DB.userName()[0]?.toUpperCase()||'📚')}</div>
-  <div class="name">${DB.userName()}</div>
-  <div class="sub">Profil Livroo</div>
-  <div class="stats">
-    <div class="stat"><div class="stat-n">${lus.length}</div><div class="stat-l">Lus</div></div>
-    <div class="stat"><div class="stat-n">${avg}</div><div class="stat-l">Note moy.</div></div>
-    <div class="stat"><div class="stat-n">${pages>999?(pages/1000).toFixed(1)+'k':pages}</div><div class="stat-l">Pages</div></div>
-  </div>
-  ${badges.length ? '<div class="badges">'+badges.slice(0,8).map(b=>'<div class="b">'+b.icon+' '+b.name+'</div>').join('')+'</div>' : ''}
-  ${coups.length ? '<div class="coups"><div class="coup-title">💖 Mes coups de cœur</div>'+coups.slice(0,4).map(b=>'<div class="coup-item"><div class="coup-cover">'+(b.cover?'<img src="'+b.cover+'" onerror="this.remove()">':'📖')+'</div><div><div class="coup-t">'+(b.titre||'')+'</div><div class="coup-a">'+(b.auteur||'')+'</div>'+(b.note?'<div class="coup-stars">'+'⭐'.repeat(b.note)+'</div>':'')+'</div></div>').join('')+'</div>' : ''}
-  <a class="cta" href="${window.location.href.split('/').slice(0,-1).join('/')}/">Rejoindre Livroo 📚</a>
-  </div></body></html>`;
-
-  // Open in new tab
-  const blob = new Blob([html], {type:'text/html'});
-  const url = URL.createObjectURL(blob);
-  window.open(url,'_blank');
-  localStorage.setItem('lv_profile_shared','1');
-  toast('🔗 Profil public ouvert !');
-  checkBadgesIfNeeded();
-}
-
-function sharePublicProfile() {
-  if(navigator.share) {
-    navigator.share({
-      title: DB.userName()+' sur Livroo',
-      text: 'Découvrez mes lectures sur Livroo 📚',
-      url: window.location.href
-    }).catch(()=>{});
-  } else {
-    navigator.clipboard?.writeText(window.location.href).then(()=>toast('🔗 Lien copié !'));
-  }
-  localStorage.setItem('lv_profile_shared','1');
-  checkBadgesIfNeeded();
-}
-
-// ════════════════════════════════════════════
-// NOTIFICATIONS PUSH
-// ════════════════════════════════════════════
-
-// Clé VAPID publique pour les notifications push (générée)
-const VAPID_PUBLIC_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBZuhbgE8nr7VnhxqoXCM7cH6IQ';
-
-async function requestNotifPermission() {
-  if(!('Notification' in window)) return false;
-  if(Notification.permission === 'granted') return true;
-  if(Notification.permission === 'denied') return false;
-  const result = await Notification.requestPermission();
-  return result === 'granted';
-}
-
-async function subscribePush() {
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    const existing = await reg.pushManager.getSubscription();
-    if(existing) return existing;
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+  
+  // ════════════════════════════════════════════
+  // BADGE NOTIFICATIONS
+  // ════════════════════════════════════════════
+  function checkBadgesIfNeeded() {
+    const books  = DB.books();
+    const lus    = books.filter(b=>b.statut==='Lu');
+    const coups  = books.filter(b=>b.coup);
+    const quotes = DB.quotes();
+    const friends= DB.friends();
+    const all    = computeBadges(lus,coups,quotes,friends);
+    const seen   = DB.get('lv_seen_badges',[]);
+    const newOnes= all.filter(b=>b.unlocked && !seen.includes(b.name));
+    if(!newOnes.length) return;
+    const updated = [...seen, ...newOnes.map(b=>b.name)];
+    DB.set('lv_seen_badges', updated);
+    saveBadgeDates(all);
+    let delay = 0;
+    newOnes.forEach(b => {
+      setTimeout(() => showBadgeNotif(b), delay);
+      delay += 3400;
     });
-    // Sauvegarder la souscription dans Supabase
-    const uid = localStorage.getItem('lv_uid');
-    if(uid) {
-      await _supa.from('profiles').update({
-        push_sub: JSON.stringify(sub)
-      }).eq('id', uid);
+  }
+  
+  function showBadgeNotif(badge) {
+    // Create notif element if not present
+    let n = $id('badge-notif');
+    if(!n) {
+      n = document.createElement('div');
+      n.id = 'badge-notif';
+      n.style.cssText = 'position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,rgba(232,197,106,.97),rgba(124,92,191,.97));padding:14px 20px calc(14px + env(safe-area-inset-top,0px)) 20px;z-index:500;display:none;text-align:center;backdrop-filter:blur(10px);cursor:pointer';
+      n.innerHTML = '<span id="bni" style="font-size:32px;display:block;margin-bottom:4px"></span><div id="bnt" style="font-family:Fraunces,serif;font-size:16px;color:#fff;font-weight:700"></div><div id="bns" style="font-size:12px;color:rgba(255,255,255,.85);margin-top:3px"></div>';
+      n.onclick = () => n.style.display = 'none';
+      document.body.appendChild(n);
     }
-    return sub;
-  } catch(e) { console.warn('Push subscribe error:', e); return null; }
-}
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for(let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
-  return outputArray;
-}
-
-// Notification locale (in-app + système si permission accordée)
-function sendLocalNotif(title, body, icon, targetScreen) {
-  icon = icon || '📚';
-  // Notification in-app (toujours visible)
-  showInAppNotif(title, body, icon, targetScreen);
-  // Notification système si permission accordée
-  if(Notification.permission === 'granted' && 'serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then(function(reg) {
-      reg.showNotification(title, {
-        body: body,
-        icon: 'icon-192.png',
-        badge: 'icon-192.png',
-        vibrate: [200, 100, 200],
-        tag: 'livroo-notif',
-        data: { url: window.location.href, screen: targetScreen || 'social' }
+    n.querySelector('#bni').textContent = badge.icon;
+    n.querySelector('#bnt').textContent = '🏆 Badge débloqué : ' + badge.name;
+    n.querySelector('#bns').textContent = badge.desc || badge.name;
+    n.style.display = 'block';
+    // Animate in
+    n.style.transform = 'translateY(-100%)';
+    n.style.transition = 'transform .4s cubic-bezier(.34,1.56,.64,1)';
+    requestAnimationFrame(() => requestAnimationFrame(() => n.style.transform = 'translateY(0)'));
+    setTimeout(() => {
+      n.style.transform = 'translateY(-100%)';
+      setTimeout(() => n.style.display='none', 400);
+    }, 3000);
+  }
+  
+  // ════════════════════════════════════════════
+  // PROFIL PUBLIC
+  // ════════════════════════════════════════════
+  function generatePublicProfile() {
+    const books  = DB.books();
+    const lus    = books.filter(b=>b.statut==='Lu');
+    const coups  = books.filter(b=>b.coup);
+    const badges = computeBadges(lus,coups,DB.quotes(),DB.friends()).filter(b=>b.unlocked);
+    const pages  = lus.reduce((s,b)=>s+(parseInt(b.pages)||0),0);
+    const avg    = lus.filter(b=>b.note).length
+      ? (lus.filter(b=>b.note).reduce((s,b)=>s+b.note,0)/lus.filter(b=>b.note).length).toFixed(1)
+      : '—';
+  
+    // Build shareable HTML card as data URL
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta property="og:title" content="${DB.userName()} sur Livroo">
+    <meta property="og:description" content="${lus.length} livres lus · ${pages.toLocaleString('fr-FR')} pages · Note moyenne ${avg}">
+    <title>${DB.userName()} — Livroo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{background:linear-gradient(135deg,#0d0d1a 0%,#1a1040 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:"DM Sans",sans-serif;padding:20px}
+      .card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:32px 28px;max-width:420px;width:100%;text-align:center}
+      .logo{font-size:11px;color:rgba(255,255,255,.4);letter-spacing:3px;text-transform:uppercase;margin-bottom:20px}
+      .avatar{width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,#7c5cbf,#e87c8a);display:flex;align-items:center;justify-content:center;font-size:32px;color:#fff;font-family:"Fraunces",serif;font-weight:700;margin:0 auto 14px;border:3px solid rgba(155,127,232,.4)}
+      .name{font-family:"Fraunces",serif;font-size:26px;color:#f0ecff;font-weight:700;margin-bottom:4px}
+      .sub{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:24px}
+      .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+      .stat{background:rgba(255,255,255,.06);border-radius:14px;padding:14px 8px}
+      .stat-n{font-family:"Fraunces",serif;font-size:28px;color:#9b7fe8;font-weight:700}
+      .stat-l{font-size:10px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+      .badges{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:24px}
+      .b{background:rgba(232,197,106,.1);border:1px solid rgba(232,197,106,.25);border-radius:20px;padding:5px 12px;font-size:12px;color:#f5d98a;display:flex;align-items:center;gap:5px}
+      .coups{margin-bottom:24px}
+      .coup-title{font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+      .coup-item{display:flex;align-items:center;gap:10px;padding:9px 12px;background:rgba(255,255,255,.04);border-radius:12px;margin-bottom:7px;text-align:left}
+      .coup-cover{width:36px;height:52px;border-radius:5px;background:#2a2050;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px}
+      .coup-cover img{width:100%;height:100%;object-fit:cover}
+      .coup-t{font-size:13px;color:#f0ecff;font-weight:500}
+      .coup-a{font-size:11px;color:rgba(255,255,255,.4);margin-top:2px}
+      .cta{background:linear-gradient(135deg,#7c5cbf,#9b7fe8);border-radius:14px;padding:13px 20px;font-size:14px;font-weight:600;color:#fff;text-decoration:none;display:inline-block;margin-top:4px}
+      .coup-stars{font-size:11px;color:#e8c56a;margin-top:2px}
+    </style></head><body><div class="card">
+    <div class="logo">📚 Livroo</div>
+    <div class="avatar">${(DB.avatar()?'<img src="'+DB.avatar()+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':DB.userName()[0]?.toUpperCase()||'📚')}</div>
+    <div class="name">${DB.userName()}</div>
+    <div class="sub">Profil Livroo</div>
+    <div class="stats">
+      <div class="stat"><div class="stat-n">${lus.length}</div><div class="stat-l">Lus</div></div>
+      <div class="stat"><div class="stat-n">${avg}</div><div class="stat-l">Note moy.</div></div>
+      <div class="stat"><div class="stat-n">${pages>999?(pages/1000).toFixed(1)+'k':pages}</div><div class="stat-l">Pages</div></div>
+    </div>
+    ${badges.length ? '<div class="badges">'+badges.slice(0,8).map(b=>'<div class="b">'+b.icon+' '+b.name+'</div>').join('')+'</div>' : ''}
+    ${coups.length ? '<div class="coups"><div class="coup-title">💖 Mes coups de cœur</div>'+coups.slice(0,4).map(b=>'<div class="coup-item"><div class="coup-cover">'+(b.cover?'<img src="'+b.cover+'" onerror="this.remove()">':'📖')+'</div><div><div class="coup-t">'+(b.titre||'')+'</div><div class="coup-a">'+(b.auteur||'')+'</div>'+(b.note?'<div class="coup-stars">'+'⭐'.repeat(b.note)+'</div>':'')+'</div></div>').join('')+'</div>' : ''}
+    <a class="cta" href="${window.location.href.split('/').slice(0,-1).join('/')}/">Rejoindre Livroo 📚</a>
+    </div></body></html>`;
+  
+    // Open in new tab
+    const blob = new Blob([html], {type:'text/html'});
+    const url = URL.createObjectURL(blob);
+    window.open(url,'_blank');
+    localStorage.setItem('lv_profile_shared','1');
+    toast('🔗 Profil public ouvert !');
+    checkBadgesIfNeeded();
+  }
+  
+  function sharePublicProfile() {
+    if(navigator.share) {
+      navigator.share({
+        title: DB.userName()+' sur Livroo',
+        text: 'Découvrez mes lectures sur Livroo 📚',
+        url: window.location.href
+      }).catch(()=>{});
+    } else {
+      navigator.clipboard?.writeText(window.location.href).then(()=>toast('🔗 Lien copié !'));
+    }
+    localStorage.setItem('lv_profile_shared','1');
+    checkBadgesIfNeeded();
+  }
+  
+  // ════════════════════════════════════════════
+  // NOTIFICATIONS PUSH
+  // ════════════════════════════════════════════
+  
+  // Clé VAPID publique pour les notifications push (générée)
+  const VAPID_PUBLIC_KEY = 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBZuhbgE8nr7VnhxqoXCM7cH6IQ';
+  
+  async function requestNotifPermission() {
+    if(!('Notification' in window)) return false;
+    if(Notification.permission === 'granted') return true;
+    if(Notification.permission === 'denied') return false;
+    const result = await Notification.requestPermission();
+    return result === 'granted';
+  }
+  
+  async function subscribePush() {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if(existing) return existing;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+      // Sauvegarder la souscription dans Supabase
+      const uid = localStorage.getItem('lv_uid');
+      if(uid) {
+        await _supa.from('profiles').update({
+          push_sub: JSON.stringify(sub)
+        }).eq('id', uid);
+      }
+      return sub;
+    } catch(e) { console.warn('Push subscribe error:', e); return null; }
+  }
+  
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - base64String.length % 4) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for(let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+  
+  // Notification locale (in-app + système si permission accordée)
+  function sendLocalNotif(title, body, icon, targetScreen) {
+    icon = icon || '📚';
+    // Notification in-app (toujours visible)
+    showInAppNotif(title, body, icon, targetScreen);
+    // Notification système si permission accordée
+    if(Notification.permission === 'granted' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(function(reg) {
+        reg.showNotification(title, {
+          body: body,
+          icon: 'icon-192.png',
+          badge: 'icon-192.png',
+          vibrate: [200, 100, 200],
+          tag: 'livroo-notif',
+          data: { url: window.location.href, screen: targetScreen || 'social' }
+        });
+      });
+    }
+  }
+  
+  // Notification visuelle in-app (barre en haut)
+  function showInAppNotif(title, body, icon, targetScreen) {
+    var n = document.getElementById('inapp-notif');
+    if(!n) {
+      n = document.createElement('div');
+      n.id = 'inapp-notif';
+      n.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:600;background:var(--bg2);border-bottom:1px solid var(--border2);padding:12px 16px calc(12px + env(safe-area-inset-top,0px)) 16px;display:none;backdrop-filter:blur(20px)';
+      n.innerHTML = '<div style="display:flex;align-items:center;gap:12px">'
+        + '<div id="ian-icon" style="font-size:24px;flex-shrink:0"></div>'
+        + '<div style="flex:1" id="ian-wrap"><div id="ian-title" style="font-size:13px;color:var(--cream);font-weight:600"></div>'
+        + '<div id="ian-body" style="font-size:11px;color:var(--text2);margin-top:2px"></div>'
+        + '<div id="ian-hint" style="font-size:10px;color:var(--violet3);margin-top:3px;display:none">Appuyer pour voir &#8594;</div></div>'
+        + '<button id="ian-x" style="margin-left:8px;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">&#x2715;</button></div>';
+      document.body.appendChild(n);
+      var ianX=document.getElementById('ian-x');if(ianX)ianX.addEventListener('click',function(e){e.stopPropagation();n.style.display='none';});
+      if(!document.getElementById('ian-css')){var cs=document.createElement('style');cs.id='ian-css';cs.textContent='@keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}';document.head.appendChild(cs);}
+    }
+    document.getElementById('ian-icon').textContent  = icon || '📚';
+    document.getElementById('ian-title').textContent = title;
+    document.getElementById('ian-body').textContent  = body;
+    var hint=document.getElementById('ian-hint'), wrap=document.getElementById('ian-wrap');
+    n._screen = targetScreen || null;
+    if(targetScreen){ hint.style.display='block'; n.style.cursor='pointer'; wrap.onclick=function(){n.style.display='none';showScreen(targetScreen);}; }
+    else { hint.style.display='none'; n.style.cursor='default'; wrap.onclick=null; }
+    n.style.display='block'; n.style.animation='slideDown .3s ease';
+    if(n._t) clearTimeout(n._t);
+    n._t=setTimeout(function(){n.style.display='none';},6000);
+  }
+  // ── Vérifications périodiques (au lancement de l'app) ──
+  async function checkAllNotifications() {
+    const uid = localStorage.getItem('lv_uid');
+    if(!uid || localStorage.getItem('lv_guest')==='1') return;
+  
+    // 1. Demandes d'amis en attente
+    try {
+      const pending = await loadPendingRequests();
+      if(pending.length > 0) {
+        const seen = JSON.parse(localStorage.getItem('lv_notif_seen_reqs') || '[]');
+        const newOnes = pending.filter(function(r){ return !seen.includes(r.id); });
+        if(newOnes.length > 0) {
+          const names = newOnes.map(function(r){ return r.profiles ? r.profiles.pseudo : 'Quelqu\u2019un'; });
+          sendLocalNotif(
+            newOnes.length === 1 ? '\uD83E\uDD1D Demande d\u2019ami' : '\uD83E\uDD1D ' + newOnes.length + ' demandes d\u2019amis',
+            names.join(', ') + (newOnes.length === 1 ? ' souhaite vous ajouter !' : ' souhaitent vous ajouter !'),
+            '\uD83E\uDD1D'
+          );
+          const updatedSeen = seen.concat(newOnes.map(function(r){ return r.id; }));
+          localStorage.setItem('lv_notif_seen_reqs', JSON.stringify(updatedSeen));
+        }
+      }
+    } catch(e) {}
+  
+    // 2. Recommandations non vues
+    const recos = DB.recos().filter(function(r){ return r.to==='me' && !r.dismissed; });
+    const seenRecos = JSON.parse(localStorage.getItem('lv_notif_seen_recos') || '[]');
+    const newRecos  = recos.filter(function(r){ return !seenRecos.includes(r.id); });
+    if(newRecos.length > 0) {
+      sendLocalNotif(
+        '\uD83D\uDC8C ' + (newRecos.length === 1 ? 'Nouvelle recommandation' : newRecos.length + ' nouvelles recommandations'),
+        newRecos.length === 1
+          ? newRecos[0].fromName + ' vous recommande \u00ab\u00a0' + newRecos[0].book.titre + '\u00a0\u00bb'
+          : 'Consultez l\u2019onglet Amis pour les voir',
+        '\uD83D\uDC8C'
+      );
+      localStorage.setItem('lv_notif_seen_recos', JSON.stringify(seenRecos.concat(newRecos.map(function(r){ return r.id; }))));
+    }
+  
+    // 3. Rappel de lecture — 7 jours sans activité
+    const lastRead = parseInt(localStorage.getItem('lv_last_read') || '0');
+    const daysSinceRead = Math.floor((Date.now() - lastRead) / 86400000);
+    const notifReadKey = 'lv_notif_read_sent';
+    const lastReminderSent = parseInt(localStorage.getItem(notifReadKey) || '0');
+    const daysSinceReminder = Math.floor((Date.now() - lastReminderSent) / 86400000);
+    if(lastRead > 0 && daysSinceRead >= 7 && daysSinceReminder >= 7) {
+      const books = DB.books().filter(function(b){ return b.statut === 'En cours'; });
+      const msg = books.length > 0
+        ? 'Reprenez ' + books[0].titre + ' \u2014 vous en \u00e9tiez \u00e0 la page ' + (books[0].currentPage || '?')
+        : 'Cela fait ' + daysSinceRead + ' jours sans lecture \u2014 un bon livre vous attend !';
+      sendLocalNotif('\uD83D\uDCD6 Rappel de lecture', msg, '\uD83D\uDCD6');
+      localStorage.setItem(notifReadKey, Date.now().toString());
+    }
+  
+    // 4. Objectif annuel — rappel si on est à mi-année et en retard
+    const goal = DB.goal();
+    if(goal.target) {
+      const lus = DB.books().filter(function(b){ return b.statut === 'Lu'; }).length;
+      const now  = new Date();
+      const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+      const expectedAtThisPoint = Math.round(goal.target * dayOfYear / 365);
+      const behind = expectedAtThisPoint - lus;
+      const goalNotifKey = 'lv_notif_goal_' + now.getFullYear() + '_' + Math.floor(dayOfYear / 30);
+      if(behind >= 2 && !localStorage.getItem(goalNotifKey)) {
+        sendLocalNotif(
+          '\uD83C\uDFAF Objectif annuel',
+          'Vous avez ' + lus + ' livre' + (lus !== 1 ? 's' : '') + ' lus sur ' + goal.target + ' \u2014 encore ' + (goal.target - lus) + ' pour atteindre votre objectif !',
+          '\uD83C\uDFAF'
+        );
+        localStorage.setItem(goalNotifKey, '1');
+      }
+    }
+  }
+  
+  // Mettre à jour lv_last_read à chaque ajout de livre lu
+  function updateLastRead() {
+    localStorage.setItem('lv_last_read', Date.now().toString());
+  }
+  
+  // ── Demander la permission et s'abonner ──
+  async function setupNotifications() {
+    if(!('Notification' in window) && !('serviceWorker' in navigator)) {
+      toast('\u26A0\uFE0F Notifications non support\u00e9es sur cet appareil');
+      return;
+    }
+    const granted = await requestNotifPermission();
+    if(granted) {
+      await subscribePush();
+      toast('\uD83D\uDD14 Notifications activ\u00e9es !');
+      localStorage.setItem('lv_notifs_enabled', '1');
+    } else {
+      toast('\u274C Notifications refus\u00e9es — activez-les dans les r\u00e9glages');
+    }
+  }
+  
+  // Image lazy loader — adds .loaded on onload
+  function imgLoad(img) {
+    if(!img) return;
+    if(img.complete && img.naturalWidth) { img.classList.add('loaded'); return; }
+    img.addEventListener('load', function(){ img.classList.add('loaded'); });
+    img.addEventListener('error', function(){ img.remove(); });
+  }
+  // Apply to all images currently in DOM and to future mutations
+  function initImgLoaders() {
+    document.querySelectorAll('img').forEach(imgLoad);
+  }
+  // MutationObserver to auto-apply on newly added images
+  var _imgObserver = new MutationObserver(function(mutations) {
+    mutations.forEach(function(m) {
+      m.addedNodes.forEach(function(node) {
+        if(node.tagName === 'IMG') { imgLoad(node); }
+        else if(node.querySelectorAll) { node.querySelectorAll('img').forEach(imgLoad); }
       });
     });
-  }
-}
-
-// Notification visuelle in-app (barre en haut)
-function showInAppNotif(title, body, icon, targetScreen) {
-  var n = document.getElementById('inapp-notif');
-  if(!n) {
-    n = document.createElement('div');
-    n.id = 'inapp-notif';
-    n.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:600;background:var(--bg2);border-bottom:1px solid var(--border2);padding:12px 16px calc(12px + env(safe-area-inset-top,0px)) 16px;display:none;backdrop-filter:blur(20px)';
-    n.innerHTML = '<div style="display:flex;align-items:center;gap:12px">'
-      + '<div id="ian-icon" style="font-size:24px;flex-shrink:0"></div>'
-      + '<div style="flex:1" id="ian-wrap"><div id="ian-title" style="font-size:13px;color:var(--cream);font-weight:600"></div>'
-      + '<div id="ian-body" style="font-size:11px;color:var(--text2);margin-top:2px"></div>'
-      + '<div id="ian-hint" style="font-size:10px;color:var(--violet3);margin-top:3px;display:none">Appuyer pour voir &#8594;</div></div>'
-      + '<button id="ian-x" style="margin-left:8px;background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer;padding:4px">&#x2715;</button></div>';
-    document.body.appendChild(n);
-    document.getElementById('ian-x').addEventListener('click',function(e){e.stopPropagation();n.style.display='none';});
-    if(!document.getElementById('ian-css')){var cs=document.createElement('style');cs.id='ian-css';cs.textContent='@keyframes slideDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}';document.head.appendChild(cs);}
-  }
-  document.getElementById('ian-icon').textContent  = icon || '📚';
-  document.getElementById('ian-title').textContent = title;
-  document.getElementById('ian-body').textContent  = body;
-  var hint=document.getElementById('ian-hint'), wrap=document.getElementById('ian-wrap');
-  n._screen = targetScreen || null;
-  if(targetScreen){ hint.style.display='block'; n.style.cursor='pointer'; wrap.onclick=function(){n.style.display='none';showScreen(targetScreen);}; }
-  else { hint.style.display='none'; n.style.cursor='default'; wrap.onclick=null; }
-  n.style.display='block'; n.style.animation='slideDown .3s ease';
-  if(n._t) clearTimeout(n._t);
-  n._t=setTimeout(function(){n.style.display='none';},6000);
-}
-// ── Vérifications périodiques (au lancement de l'app) ──
-async function checkAllNotifications() {
-  const uid = localStorage.getItem('lv_uid');
-  if(!uid || localStorage.getItem('lv_guest')==='1') return;
-
-  // 1. Demandes d'amis en attente
-  try {
-    const pending = await loadPendingRequests();
-    if(pending.length > 0) {
-      const seen = JSON.parse(localStorage.getItem('lv_notif_seen_reqs') || '[]');
-      const newOnes = pending.filter(function(r){ return !seen.includes(r.id); });
-      if(newOnes.length > 0) {
-        const names = newOnes.map(function(r){ return r.profiles ? r.profiles.pseudo : 'Quelqu\u2019un'; });
-        sendLocalNotif(
-          newOnes.length === 1 ? '\uD83E\uDD1D Demande d\u2019ami' : '\uD83E\uDD1D ' + newOnes.length + ' demandes d\u2019amis',
-          names.join(', ') + (newOnes.length === 1 ? ' souhaite vous ajouter !' : ' souhaitent vous ajouter !'),
-          '\uD83E\uDD1D'
-        );
-        const updatedSeen = seen.concat(newOnes.map(function(r){ return r.id; }));
-        localStorage.setItem('lv_notif_seen_reqs', JSON.stringify(updatedSeen));
-      }
-    }
-  } catch(e) {}
-
-  // 2. Recommandations non vues
-  const recos = DB.recos().filter(function(r){ return r.to==='me' && !r.dismissed; });
-  const seenRecos = JSON.parse(localStorage.getItem('lv_notif_seen_recos') || '[]');
-  const newRecos  = recos.filter(function(r){ return !seenRecos.includes(r.id); });
-  if(newRecos.length > 0) {
-    sendLocalNotif(
-      '\uD83D\uDC8C ' + (newRecos.length === 1 ? 'Nouvelle recommandation' : newRecos.length + ' nouvelles recommandations'),
-      newRecos.length === 1
-        ? newRecos[0].fromName + ' vous recommande \u00ab\u00a0' + newRecos[0].book.titre + '\u00a0\u00bb'
-        : 'Consultez l\u2019onglet Amis pour les voir',
-      '\uD83D\uDC8C'
-    );
-    localStorage.setItem('lv_notif_seen_recos', JSON.stringify(seenRecos.concat(newRecos.map(function(r){ return r.id; }))));
-  }
-
-  // 3. Rappel de lecture — 7 jours sans activité
-  const lastRead = parseInt(localStorage.getItem('lv_last_read') || '0');
-  const daysSinceRead = Math.floor((Date.now() - lastRead) / 86400000);
-  const notifReadKey = 'lv_notif_read_sent';
-  const lastReminderSent = parseInt(localStorage.getItem(notifReadKey) || '0');
-  const daysSinceReminder = Math.floor((Date.now() - lastReminderSent) / 86400000);
-  if(lastRead > 0 && daysSinceRead >= 7 && daysSinceReminder >= 7) {
-    const books = DB.books().filter(function(b){ return b.statut === 'En cours'; });
-    const msg = books.length > 0
-      ? 'Reprenez ' + books[0].titre + ' \u2014 vous en \u00e9tiez \u00e0 la page ' + (books[0].currentPage || '?')
-      : 'Cela fait ' + daysSinceRead + ' jours sans lecture \u2014 un bon livre vous attend !';
-    sendLocalNotif('\uD83D\uDCD6 Rappel de lecture', msg, '\uD83D\uDCD6');
-    localStorage.setItem(notifReadKey, Date.now().toString());
-  }
-
-  // 4. Objectif annuel — rappel si on est à mi-année et en retard
-  const goal = DB.goal();
-  if(goal.target) {
-    const lus = DB.books().filter(function(b){ return b.statut === 'Lu'; }).length;
-    const now  = new Date();
-    const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
-    const expectedAtThisPoint = Math.round(goal.target * dayOfYear / 365);
-    const behind = expectedAtThisPoint - lus;
-    const goalNotifKey = 'lv_notif_goal_' + now.getFullYear() + '_' + Math.floor(dayOfYear / 30);
-    if(behind >= 2 && !localStorage.getItem(goalNotifKey)) {
-      sendLocalNotif(
-        '\uD83C\uDFAF Objectif annuel',
-        'Vous avez ' + lus + ' livre' + (lus !== 1 ? 's' : '') + ' lus sur ' + goal.target + ' \u2014 encore ' + (goal.target - lus) + ' pour atteindre votre objectif !',
-        '\uD83C\uDFAF'
-      );
-      localStorage.setItem(goalNotifKey, '1');
-    }
-  }
-}
-
-// Mettre à jour lv_last_read à chaque ajout de livre lu
-function updateLastRead() {
-  localStorage.setItem('lv_last_read', Date.now().toString());
-}
-
-// ── Demander la permission et s'abonner ──
-async function setupNotifications() {
-  if(!('Notification' in window) && !('serviceWorker' in navigator)) {
-    toast('\u26A0\uFE0F Notifications non support\u00e9es sur cet appareil');
-    return;
-  }
-  const granted = await requestNotifPermission();
-  if(granted) {
-    await subscribePush();
-    toast('\uD83D\uDD14 Notifications activ\u00e9es !');
-    localStorage.setItem('lv_notifs_enabled', '1');
-  } else {
-    toast('\u274C Notifications refus\u00e9es — activez-les dans les r\u00e9glages');
-  }
-}
-
-// Image lazy loader — adds .loaded on onload
-function imgLoad(img) {
-  if(!img) return;
-  if(img.complete && img.naturalWidth) { img.classList.add('loaded'); return; }
-  img.addEventListener('load', function(){ img.classList.add('loaded'); });
-  img.addEventListener('error', function(){ img.remove(); });
-}
-// Apply to all images currently in DOM and to future mutations
-function initImgLoaders() {
-  document.querySelectorAll('img').forEach(imgLoad);
-}
-// MutationObserver to auto-apply on newly added images
-var _imgObserver = new MutationObserver(function(mutations) {
-  mutations.forEach(function(m) {
-    m.addedNodes.forEach(function(node) {
-      if(node.tagName === 'IMG') { imgLoad(node); }
-      else if(node.querySelectorAll) { node.querySelectorAll('img').forEach(imgLoad); }
+  });
+  if(document.body) _imgObserver.observe(document.body, { childList: true, subtree: true });
+  else document.addEventListener('DOMContentLoaded', function(){ _imgObserver.observe(document.body, { childList: true, subtree: true }); });
+  
+  // ════════════════════════════════════════════
+  // RANKING & PUBLIC PROFILES
+  // ════════════════════════════════════════════
+  var _rankTab='readers',_rankData=[];
+  document.querySelectorAll('.rank-tab').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      document.querySelectorAll('.rank-tab').forEach(function(b){b.classList.remove('active');});
+      btn.classList.add('active');_rankTab=btn.getAttribute('data-rank');renderRankingList();
     });
   });
-});
-_imgObserver.observe(document.body, { childList: true, subtree: true });
-
-// ════════════════════════════════════════════
-// RANKING & PUBLIC PROFILES
-// ════════════════════════════════════════════
-var _rankTab='readers',_rankData=[];
-document.querySelectorAll('.rank-tab').forEach(function(btn){
-  btn.addEventListener('click',function(){
-    document.querySelectorAll('.rank-tab').forEach(function(b){b.classList.remove('active');});
-    btn.classList.add('active');_rankTab=btn.getAttribute('data-rank');renderRankingList();
-  });
-});
-
-async function renderRanking(){
-  $id('ranking-sub').textContent='Chargement…';
-  $id('ranking-list').innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
-  try{
-    var res=await _supa.from('public_profiles').select('*').order('books_count',{ascending:false}).limit(50);
-    _rankData=res.data||[];
-    var uid=localStorage.getItem('lv_uid');
-    if(uid&&!_rankData.find(function(u){return u.id===uid;}))_rankData.push(buildMyPublicProfile());
-    $id('ranking-sub').textContent=_rankData.length+' lecteur'+(_rankData.length!==1?'s':'');
-    renderRankingList();
-  }catch(e){_rankData=[buildMyPublicProfile()];renderRankingList();}
-}
-
-function buildMyPublicProfile(){
-  var books=DB.books();
-  var lus=books.filter(function(b){return b.statut==='Lu';});
-  var coups=books.filter(function(b){return b.coup;});
-  var pg=lus.reduce(function(s,b){return s+(parseInt(b.pages)||0);},0);
-  var noted=lus.filter(function(b){return b.note;});
-  var avg=noted.length?(noted.reduce(function(s,b){return s+b.note;},0)/noted.length).toFixed(1):0;
-  var badges=computeBadges(lus,coups,DB.quotes(),DB.friends()).filter(function(b){return b.unlocked;});
-  return{id:localStorage.getItem('lv_uid')||'me',pseudo:DB.userName(),avatar:DB.avatar()||null,
-    books_count:lus.length,pages_count:pg,avg_note:parseFloat(avg),badges_count:badges.length,
-    coups:coups.slice(0,5).map(function(b){return{titre:b.titre,auteur:b.auteur,cover:b.cover||''};}),
-    badges:badges.slice(0,8).map(function(b){return{icon:b.icon,name:b.name};}),
-    joined_at:parseInt(localStorage.getItem('lv_joined_at')||'0'),_isMe:true};
-}
-
-async function syncPublicProfile(){
-  var uid=localStorage.getItem('lv_uid');
-  if(!uid||localStorage.getItem('lv_guest')==='1')return;
-  try{
-    var p=buildMyPublicProfile();
-    await _supa.from('public_profiles').upsert({id:uid,pseudo:p.pseudo,avatar:p.avatar,
-      books_count:p.books_count,pages_count:p.pages_count,avg_note:p.avg_note,
-      badges_count:p.badges_count,coups:p.coups,badges:p.badges,
-      joined_at:p.joined_at,updated_at:new Date().toISOString()},{onConflict:'id'});
-  }catch(e){console.warn('syncPublicProfile:',e);}
-}
-
-function gradForUser(name){
-  var g=['linear-gradient(135deg,#3d2a6a,#7c5cbf)','linear-gradient(135deg,#2a3d6a,#5c7cbf)',
-    'linear-gradient(135deg,#6a2a3d,#bf5c7c)','linear-gradient(135deg,#2a6a4a,#5cbf7c)',
-    'linear-gradient(135deg,#4a3d2a,#bf9c5c)','linear-gradient(135deg,#2a4a6a,#5c9cbf)'];
-  var h=0;for(var i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))%g.length;
-  return g[Math.abs(h)];
-}
-
-function renderRankingList(){
-  var uid=localStorage.getItem('lv_uid');
-  var sorted=_rankData.slice();
-  var medals=['🥇','🥈','🥉'];
-  var valFn,subFn;
-  if(_rankTab==='readers'){
-    sorted.sort(function(a,b){return(b.books_count||0)-(a.books_count||0);});
-    valFn=function(u){return(u.books_count||0)+' 📚';};
-    subFn=function(u){return(u.avg_note?'★ '+u.avg_note+' · ':'')+((u.pages_count||0)).toLocaleString('fr-FR')+' pages';};
-  }else if(_rankTab==='veterans'){
-    sorted.sort(function(a,b){return(a.joined_at||Date.now())-(b.joined_at||Date.now());});
-    valFn=function(u){var d=u.joined_at?Math.floor((Date.now()-u.joined_at)/86400000):0;return d>=365?Math.floor(d/365)+' an'+(Math.floor(d/365)>1?'s':''):d+' j';};
-    subFn=function(u){return u.joined_at?'Inscrit en '+new Date(u.joined_at).toLocaleDateString('fr-FR',{month:'long',year:'numeric'}):'Inconnu';};
-  }else{
-    sorted.sort(function(a,b){return((b.badges_count||0)*3+(b.books_count||0))-((a.badges_count||0)*3+(a.books_count||0));});
-    valFn=function(u){return(u.badges_count||0)+' 🏆';};
-    subFn=function(u){var c=Array.isArray(u.coups)?u.coups.length:0;return(u.books_count||0)+' livres · '+c+' coups de cœur';};
+  
+  async function renderRanking(){
+    $id('ranking-sub').textContent='Chargement…';
+    $id('ranking-list').innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
+    try{
+      var res=await _supa.from('public_profiles').select('*').order('books_count',{ascending:false}).limit(50);
+      _rankData=res.data||[];
+      var uid=localStorage.getItem('lv_uid');
+      if(uid&&!_rankData.find(function(u){return u.id===uid;}))_rankData.push(buildMyPublicProfile());
+      $id('ranking-sub').textContent=_rankData.length+' lecteur'+(_rankData.length!==1?'s':'');
+      renderRankingList();
+    }catch(e){_rankData=[buildMyPublicProfile()];renderRankingList();}
   }
-  var myPos=sorted.findIndex(function(u){return u.id===uid||u._isMe;});
-  var html='';
-  if(myPos>=0)html+='<div style="background:linear-gradient(135deg,rgba(124,92,191,.12),rgba(232,197,106,.08));border:1px solid rgba(124,92,191,.2);border-radius:14px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px"><div style="font-family:Fraunces,serif;font-size:24px;color:var(--gold2)">#'+(myPos+1)+'</div><div style="font-size:12px;color:var(--text2)">Votre position dans ce classement</div></div>';
-  sorted.forEach(function(u,i){
+  
+  function buildMyPublicProfile(){
+    var books=DB.books();
+    var lus=books.filter(function(b){return b.statut==='Lu';});
+    var coups=books.filter(function(b){return b.coup;});
+    var pg=lus.reduce(function(s,b){return s+(parseInt(b.pages)||0);},0);
+    var noted=lus.filter(function(b){return b.note;});
+    var avg=noted.length?(noted.reduce(function(s,b){return s+b.note;},0)/noted.length).toFixed(1):0;
+    var badges=computeBadges(lus,coups,DB.quotes(),DB.friends()).filter(function(b){return b.unlocked;});
+    return{id:localStorage.getItem('lv_uid')||'me',pseudo:DB.userName(),avatar:DB.avatar()||null,
+      books_count:lus.length,pages_count:pg,avg_note:parseFloat(avg),badges_count:badges.length,
+      coups:coups.slice(0,5).map(function(b){return{titre:b.titre,auteur:b.auteur,cover:b.cover||''};}),
+      badges:badges.slice(0,8).map(function(b){return{icon:b.icon,name:b.name};}),
+      joined_at:parseInt(localStorage.getItem('lv_joined_at')||'0'),_isMe:true};
+  }
+  
+  async function syncPublicProfile(){
+    var uid=localStorage.getItem('lv_uid');
+    if(!uid||localStorage.getItem('lv_guest')==='1')return;
+    try{
+      var p=buildMyPublicProfile();
+      await _supa.from('public_profiles').upsert({id:uid,pseudo:p.pseudo,avatar:p.avatar,
+        books_count:p.books_count,pages_count:p.pages_count,avg_note:p.avg_note,
+        badges_count:p.badges_count,coups:p.coups,badges:p.badges,
+        joined_at:p.joined_at,updated_at:new Date().toISOString()},{onConflict:'id'});
+    }catch(e){console.warn('syncPublicProfile:',e);}
+  }
+  
+  function gradForUser(name){
+    var g=['linear-gradient(135deg,#3d2a6a,#7c5cbf)','linear-gradient(135deg,#2a3d6a,#5c7cbf)',
+      'linear-gradient(135deg,#6a2a3d,#bf5c7c)','linear-gradient(135deg,#2a6a4a,#5cbf7c)',
+      'linear-gradient(135deg,#4a3d2a,#bf9c5c)','linear-gradient(135deg,#2a4a6a,#5c9cbf)'];
+    var h=0;for(var i=0;i<name.length;i++)h=(h*31+name.charCodeAt(i))%g.length;
+    return g[Math.abs(h)];
+  }
+  
+  function renderRankingList(){
+    var uid=localStorage.getItem('lv_uid');
+    var sorted=_rankData.slice();
+    var medals=['🥇','🥈','🥉'];
+    var valFn,subFn;
+    if(_rankTab==='readers'){
+      sorted.sort(function(a,b){return(b.books_count||0)-(a.books_count||0);});
+      valFn=function(u){return(u.books_count||0)+' 📚';};
+      subFn=function(u){return(u.avg_note?'★ '+u.avg_note+' · ':'')+((u.pages_count||0)).toLocaleString('fr-FR')+' pages';};
+    }else if(_rankTab==='veterans'){
+      sorted.sort(function(a,b){return(a.joined_at||Date.now())-(b.joined_at||Date.now());});
+      valFn=function(u){var d=u.joined_at?Math.floor((Date.now()-u.joined_at)/86400000):0;return d>=365?Math.floor(d/365)+' an'+(Math.floor(d/365)>1?'s':''):d+' j';};
+      subFn=function(u){return u.joined_at?'Inscrit en '+new Date(u.joined_at).toLocaleDateString('fr-FR',{month:'long',year:'numeric'}):'Inconnu';};
+    }else{
+      sorted.sort(function(a,b){return((b.badges_count||0)*3+(b.books_count||0))-((a.badges_count||0)*3+(a.books_count||0));});
+      valFn=function(u){return(u.badges_count||0)+' 🏆';};
+      subFn=function(u){var c=Array.isArray(u.coups)?u.coups.length:0;return(u.books_count||0)+' livres · '+c+' coups de cœur';};
+    }
+    var myPos=sorted.findIndex(function(u){return u.id===uid||u._isMe;});
+    var html='';
+    if(myPos>=0)html+='<div style="background:linear-gradient(135deg,rgba(124,92,191,.12),rgba(232,197,106,.08));border:1px solid rgba(124,92,191,.2);border-radius:14px;padding:12px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px"><div style="font-family:Fraunces,serif;font-size:24px;color:var(--gold2)">#'+(myPos+1)+'</div><div style="font-size:12px;color:var(--text2)">Votre position dans ce classement</div></div>';
+    sorted.forEach(function(u,i){
+      var isMe=u.id===uid||u._isMe;
+      var grad=gradForUser(u.pseudo||'?');
+      var avHtml=u.avatar?'<img src="'+u.avatar+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':
+        '<span>'+(u.pseudo||'?')[0].toUpperCase()+'</span>';
+      var pos=i<3?medals[i]:(i+1);
+      var uJ=encodeURIComponent(JSON.stringify(u));
+      html+='<div class="rank-row'+(isMe?' me':''+'"')+' onclick="openPublicProfileEnc(\''+uJ+'\')">'
+        +'<div class="rank-pos">'+pos+'</div>'
+        +'<div class="rank-avatar" style="background:'+grad+'">'+avHtml+'</div>'
+        +'<div class="rank-info"><div class="rank-name">'+(u.pseudo||'Lecteur')+(isMe?' (vous)':'')+'</div>'
+        +'<div class="rank-sub">'+subFn(u)+'</div></div>'
+        +'<div class="rank-val">'+valFn(u)+'</div></div>';
+    });
+    if(!sorted.length)html='<div class="empty"><div class="empty-icon">🏆</div><div class="empty-title">Aucun lecteur pour l’instant</div></div>';
+    $id('ranking-list').innerHTML=html;
+  }
+  
+  function openPublicProfileEnc(enc){openPublicProfile(decodeURIComponent(enc));}
+  
+  function openPublicProfile(uJson){
+    var u=JSON.parse(uJson);
+    var uid=localStorage.getItem('lv_uid');
     var isMe=u.id===uid||u._isMe;
     var grad=gradForUser(u.pseudo||'?');
-    var avHtml=u.avatar?'<img src="'+u.avatar+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover;border-radius:50%">':
-      '<span>'+(u.pseudo||'?')[0].toUpperCase()+'</span>';
-    var pos=i<3?medals[i]:(i+1);
-    var uJ=encodeURIComponent(JSON.stringify(u));
-    html+='<div class="rank-row'+(isMe?' me':''+'"')+' onclick="openPublicProfileEnc(\''+uJ+'\')">'
-      +'<div class="rank-pos">'+pos+'</div>'
-      +'<div class="rank-avatar" style="background:'+grad+'">'+avHtml+'</div>'
-      +'<div class="rank-info"><div class="rank-name">'+(u.pseudo||'Lecteur')+(isMe?' (vous)':'')+'</div>'
-      +'<div class="rank-sub">'+subFn(u)+'</div></div>'
-      +'<div class="rank-val">'+valFn(u)+'</div></div>';
-  });
-  if(!sorted.length)html='<div class="empty"><div class="empty-icon">🏆</div><div class="empty-title">Aucun lecteur pour l’instant</div></div>';
-  $id('ranking-list').innerHTML=html;
-}
-
-function openPublicProfileEnc(enc){openPublicProfile(decodeURIComponent(enc));}
-
-function openPublicProfile(uJson){
-  var u=JSON.parse(uJson);
-  var uid=localStorage.getItem('lv_uid');
-  var isMe=u.id===uid||u._isMe;
-  var grad=gradForUser(u.pseudo||'?');
-  var avHtml=u.avatar
-    ?'<img src="'+u.avatar+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover;border-radius:50%">'
-    :'<div style="font-size:28px;font-weight:700">'+(u.pseudo||'?')[0].toUpperCase()+'</div>';
-  var days=u.joined_at?Math.floor((Date.now()-u.joined_at)/86400000):0;
-  var joined=u.joined_at?'Membre depuis '+(days>=365?Math.floor(days/365)+' an'+(Math.floor(days/365)>1?'s':''):days+' jour'+(days!==1?'s':'')):'' ;
-  var html='<div style="text-align:center;padding-bottom:14px">'
-    +'<div style="width:72px;height:72px;border-radius:50%;background:'+grad+';display:flex;align-items:center;justify-content:center;margin:0 auto 10px;border:3px solid rgba(155,127,232,.4);overflow:hidden;font-family:Fraunces,serif;color:#fff">'+avHtml+'</div>'
-    +'<div style="font-family:Fraunces,serif;font-size:22px;color:var(--cream)">'+(u.pseudo||'Lecteur')+(isMe?' (vous)':'')+'</div>'
-    +(joined?'<div style="font-size:11px;color:var(--text3);margin-top:3px">'+joined+'</div>':'')+'</div>';
-  html+='<div class="stats-grid" style="margin-bottom:14px">'
-    +'<div class="stat-card"><div class="stat-num">'+(u.books_count||0)+'</div><div class="stat-lbl">📚 Lus</div></div>'
-    +'<div class="stat-card"><div class="stat-num">'+(u.avg_note||'—')+'</div><div class="stat-lbl">★ Note</div></div>'
-    +'<div class="stat-card"><div class="stat-num">'+((u.pages_count||0)).toLocaleString('fr-FR')+'</div><div class="stat-lbl">Pages</div></div>'
-    +'<div class="stat-card"><div class="stat-num">'+(u.badges_count||0)+'</div><div class="stat-lbl">🏆 Badges</div></div></div>';
-  var coups=Array.isArray(u.coups)?u.coups:(u.coups?JSON.parse(u.coups):[]);
-  if(coups.length){
-    html+='<div class="sec-title">💖 Coups de cœur</div>';
-    coups.forEach(function(c){
-      var cv=c.cover?'<img src="'+c.cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
-      html+='<div style="display:flex;gap:10px;align-items:center;padding:9px;background:var(--bg3);border-radius:11px;margin-bottom:7px">'
-        +'<div style="width:36px;height:52px;border-radius:5px;background:'+bookColor(c.titre||'')+';display:flex;align-items:center;justify-content:center;font-size:14px;overflow:hidden;flex-shrink:0">'+cv+'</div>'
-        +'<div><div style="font-size:13px;color:var(--cream);font-weight:500">'+(c.titre||'')+'</div>'
-        +'<div style="font-size:11px;color:var(--text3)">'+(c.auteur||'')+'</div></div></div>';
+    var avHtml=u.avatar
+      ?'<img src="'+u.avatar+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover;border-radius:50%">'
+      :'<div style="font-size:28px;font-weight:700">'+(u.pseudo||'?')[0].toUpperCase()+'</div>';
+    var days=u.joined_at?Math.floor((Date.now()-u.joined_at)/86400000):0;
+    var joined=u.joined_at?'Membre depuis '+(days>=365?Math.floor(days/365)+' an'+(Math.floor(days/365)>1?'s':''):days+' jour'+(days!==1?'s':'')):'' ;
+    var html='<div style="text-align:center;padding-bottom:14px">'
+      +'<div style="width:72px;height:72px;border-radius:50%;background:'+grad+';display:flex;align-items:center;justify-content:center;margin:0 auto 10px;border:3px solid rgba(155,127,232,.4);overflow:hidden;font-family:Fraunces,serif;color:#fff">'+avHtml+'</div>'
+      +'<div style="font-family:Fraunces,serif;font-size:22px;color:var(--cream)">'+(u.pseudo||'Lecteur')+(isMe?' (vous)':'')+'</div>'
+      +(joined?'<div style="font-size:11px;color:var(--text3);margin-top:3px">'+joined+'</div>':'')+'</div>';
+    html+='<div class="stats-grid" style="margin-bottom:14px">'
+      +'<div class="stat-card"><div class="stat-num">'+(u.books_count||0)+'</div><div class="stat-lbl">📚 Lus</div></div>'
+      +'<div class="stat-card"><div class="stat-num">'+(u.avg_note||'—')+'</div><div class="stat-lbl">★ Note</div></div>'
+      +'<div class="stat-card"><div class="stat-num">'+((u.pages_count||0)).toLocaleString('fr-FR')+'</div><div class="stat-lbl">Pages</div></div>'
+      +'<div class="stat-card"><div class="stat-num">'+(u.badges_count||0)+'</div><div class="stat-lbl">🏆 Badges</div></div></div>';
+    var coups=Array.isArray(u.coups)?u.coups:(u.coups?JSON.parse(u.coups):[]);
+    if(coups.length){
+      html+='<div class="sec-title">💖 Coups de cœur</div>';
+      coups.forEach(function(c){
+        var cv=c.cover?'<img src="'+c.cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
+        html+='<div style="display:flex;gap:10px;align-items:center;padding:9px;background:var(--bg3);border-radius:11px;margin-bottom:7px">'
+          +'<div style="width:36px;height:52px;border-radius:5px;background:'+bookColor(c.titre||'')+';display:flex;align-items:center;justify-content:center;font-size:14px;overflow:hidden;flex-shrink:0">'+cv+'</div>'
+          +'<div><div style="font-size:13px;color:var(--cream);font-weight:500">'+(c.titre||'')+'</div>'
+          +'<div style="font-size:11px;color:var(--text3)">'+(c.auteur||'')+'</div></div></div>';
+      });
+    }
+    var badges=Array.isArray(u.badges)?u.badges:(u.badges?JSON.parse(u.badges):[]);
+    if(badges.length){
+      html+='<div class="sec-title">🏆 Badges</div><div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px">';
+      badges.forEach(function(b){html+='<div style="background:rgba(232,197,106,.1);border:1px solid rgba(232,197,106,.25);border-radius:20px;padding:5px 11px;font-size:12px;color:var(--gold2)">'+b.icon+' '+b.name+'</div>';});
+      html+='</div>';
+    }
+    document.getElementById('public-profile-content').innerHTML=html;
+    document.getElementById('modal-public-profile').classList.add('open');
+  }
+  
+  // ════════════════════════════════════════════
+  // BOOK EXCHANGES
+  // ════════════════════════════════════════════
+  var _exchangeBook=null;
+  
+  async function openExchangeModal(bookId){
+    var book=DB.books().find(function(b){return b.id===bookId;});
+    if(!book)return;
+    _exchangeBook=book;
+    var cv=book.cover?'<img src="'+book.cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
+    $id('exchange-book-info').innerHTML='<div style="display:flex;gap:11px;align-items:center;padding:11px;background:var(--bg3);border-radius:12px">'
+      +'<div style="width:44px;height:64px;border-radius:7px;background:'+bookColor(book.titre)+';display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">'+cv+'</div>'
+      +'<div><div style="font-family:Fraunces,serif;color:var(--cream)">'+book.titre+'</div>'
+      +'<div style="font-size:12px;color:var(--text2)">'+(book.auteur||'')+'</div>'
+      +'<div style="font-size:11px;color:var(--teal);margin-top:4px">📦 Échange physique IRL uniquement</div></div></div>';
+    var friends=DB.friends().filter(function(f){return f.status!=='pending';});
+    var fl='';
+    friends.forEach(function(f){
+      var fn2=(f.name||'?').replace(/"/g,'&quot;');
+      fl+='<label style="display:flex;align-items:center;gap:9px;padding:10px;background:var(--bg3);border-radius:10px;margin-bottom:7px;cursor:pointer">'
+        +'<input type="checkbox" class="exch-friend-check" data-id="'+f.id+'" data-name="'+fn2+'" style="width:17px;height:17px;accent-color:var(--teal)">'
+        +'<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;font-weight:700">'+((f.name||'?')[0]).toUpperCase()+'</div>'
+        +'<span style="color:var(--cream)">'+(f.name||'?')+'</span></label>';
     });
+    $id('exchange-friends-list').innerHTML=fl||'<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px">Ajoutez des amis pour proposer des échanges</div>';
+    $id('exchange-msg').value='';
+    $id('modal-exchange').classList.add('open');
   }
-  var badges=Array.isArray(u.badges)?u.badges:(u.badges?JSON.parse(u.badges):[]);
-  if(badges.length){
-    html+='<div class="sec-title">🏆 Badges</div><div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:4px">';
-    badges.forEach(function(b){html+='<div style="background:rgba(232,197,106,.1);border:1px solid rgba(232,197,106,.25);border-radius:20px;padding:5px 11px;font-size:12px;color:var(--gold2)">'+b.icon+' '+b.name+'</div>';});
-    html+='</div>';
-  }
-  document.getElementById('public-profile-content').innerHTML=html;
-  document.getElementById('modal-public-profile').classList.add('open');
-}
-
-// ════════════════════════════════════════════
-// BOOK EXCHANGES
-// ════════════════════════════════════════════
-var _exchangeBook=null;
-
-async function openExchangeModal(bookId){
-  var book=DB.books().find(function(b){return b.id===bookId;});
-  if(!book)return;
-  _exchangeBook=book;
-  var cv=book.cover?'<img src="'+book.cover+'" onerror="this.remove()" style="width:100%;height:100%;object-fit:cover">':'📖';
-  $id('exchange-book-info').innerHTML='<div style="display:flex;gap:11px;align-items:center;padding:11px;background:var(--bg3);border-radius:12px">'
-    +'<div style="width:44px;height:64px;border-radius:7px;background:'+bookColor(book.titre)+';display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">'+cv+'</div>'
-    +'<div><div style="font-family:Fraunces,serif;color:var(--cream)">'+book.titre+'</div>'
-    +'<div style="font-size:12px;color:var(--text2)">'+(book.auteur||'')+'</div>'
-    +'<div style="font-size:11px;color:var(--teal);margin-top:4px">📦 Échange physique IRL uniquement</div></div></div>';
-  var friends=DB.friends().filter(function(f){return f.status!=='pending';});
-  var fl='';
-  friends.forEach(function(f){
-    var fn2=(f.name||'?').replace(/"/g,'&quot;');
-    fl+='<label style="display:flex;align-items:center;gap:9px;padding:10px;background:var(--bg3);border-radius:10px;margin-bottom:7px;cursor:pointer">'
-      +'<input type="checkbox" class="exch-friend-check" data-id="'+f.id+'" data-name="'+fn2+'" style="width:17px;height:17px;accent-color:var(--teal)">'
-      +'<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--rose));display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;font-weight:700">'+((f.name||'?')[0]).toUpperCase()+'</div>'
-      +'<span style="color:var(--cream)">'+(f.name||'?')+'</span></label>';
+  $on('exchange-cancel', 'click',function(){$id('modal-exchange').classList.remove('open');});
+  $on('exchange-send', 'click',async function(){
+    var checked=Array.from($id('exchange-friends-list').querySelectorAll('.exch-friend-check:checked'));
+    if(!checked.length){toast('⚠️ Sélectionnez au moins un ami');return;}
+    if(!_exchangeBook)return;
+    var uid=localStorage.getItem('lv_uid');
+    var msg=$id('exchange-msg').value.trim();
+    var btn=$id('exchange-send');btn.textContent='⏳…';btn.disabled=true;
+    try{
+      for(var ci=0;ci<checked.length;ci++){
+        if(uid)await _supa.from('book_exchanges').insert({from_id:uid,to_id:checked[ci].getAttribute('data-id'),
+          book_titre:_exchangeBook.titre,book_auteur:_exchangeBook.auteur||'',
+          book_cover:_exchangeBook.cover||'',book_pages:_exchangeBook.pages||'',message:msg,status:'pending'});
+      }
+      $id('modal-exchange').classList.remove('open');
+      toast('📦 Proposition envoyée !');
+    }catch(e){toast('⚠️ Erreur : '+(e.message||e));}
+    btn.textContent='📦 Proposer';btn.disabled=false;
   });
-  $id('exchange-friends-list').innerHTML=fl||'<div style="color:var(--text3);font-size:13px;text-align:center;padding:10px">Ajoutez des amis pour proposer des échanges</div>';
-  $id('exchange-msg').value='';
-  $id('modal-exchange').classList.add('open');
-}
-$id('exchange-cancel').addEventListener('click',function(){$id('modal-exchange').classList.remove('open');});
-$id('exchange-send').addEventListener('click',async function(){
-  var checked=Array.from($id('exchange-friends-list').querySelectorAll('.exch-friend-check:checked'));
-  if(!checked.length){toast('⚠️ Sélectionnez au moins un ami');return;}
-  if(!_exchangeBook)return;
-  var uid=localStorage.getItem('lv_uid');
-  var msg=$id('exchange-msg').value.trim();
-  var btn=$id('exchange-send');btn.textContent='⏳…';btn.disabled=true;
-  try{
-    for(var ci=0;ci<checked.length;ci++){
-      if(uid)await _supa.from('book_exchanges').insert({from_id:uid,to_id:checked[ci].getAttribute('data-id'),
-        book_titre:_exchangeBook.titre,book_auteur:_exchangeBook.auteur||'',
-        book_cover:_exchangeBook.cover||'',book_pages:_exchangeBook.pages||'',message:msg,status:'pending'});
-    }
-    $id('modal-exchange').classList.remove('open');
-    toast('📦 Proposition envoyée !');
-  }catch(e){toast('⚠️ Erreur : '+(e.message||e));}
-  btn.textContent='📦 Proposer';btn.disabled=false;
-});
-
-async function loadExchanges(){
-  var uid=localStorage.getItem('lv_uid');
-  if(!uid||localStorage.getItem('lv_guest')==='1')return[];
-  try{var res=await _supa.from('book_exchanges').select('*').or('from_id.eq.'+uid+',to_id.eq.'+uid).order('created_at',{ascending:false});return res.data||[];}
-  catch(e){return[];}
-}
-async function acceptExchange(id){
-  try{await _supa.from('book_exchanges').update({status:'accepted'}).eq('id',id);
-  toast('✅ Échange accepté ! Coordonnez-vous pour l’échange physique 🤝');
-  if($id('screen-social').classList.contains('active'))renderSocial();}catch(e){toast('⚠️ Erreur');}
-}
-async function declineExchange(id){
-  try{await _supa.from('book_exchanges').update({status:'declined'}).eq('id',id);
-  toast('Proposition refusée');
-  if($id('screen-social').classList.contains('active'))renderSocial();}catch(e){toast('⚠️ Erreur');}
-}
-
-
-// ════════════════════════════════════════════
-// PHOTO DE PROFIL
-// ════════════════════════════════════════════
-var _pendingPhoto = null;
-
-function openPhotoModal() {
-  _pendingPhoto = null;
-  var preview = document.getElementById('photo-preview');
-  var placeholder = document.getElementById('photo-preview-placeholder');
-  var av = DB.avatar();
-  if(av) {
-    placeholder.style.display = 'none';
-    // Remove old img if any
-    var oldImg = preview.querySelector('img');
-    if(oldImg) oldImg.remove();
-    var img = document.createElement('img');
-    img.src = av;
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-    preview.appendChild(img);
-  } else {
-    placeholder.style.display = '';
-    var oldImg2 = preview.querySelector('img');
-    if(oldImg2) oldImg2.remove();
+  
+  async function loadExchanges(){
+    var uid=localStorage.getItem('lv_uid');
+    if(!uid||localStorage.getItem('lv_guest')==='1')return[];
+    try{var res=await _supa.from('book_exchanges').select('*').or('from_id.eq.'+uid+',to_id.eq.'+uid).order('created_at',{ascending:false});return res.data||[];}
+    catch(e){return[];}
   }
-  document.getElementById('photo-delete').style.display = av ? '' : 'none';
-  document.getElementById('modal-photo').classList.add('open');
-}
-
-document.getElementById('photo-file-input').addEventListener('change', function(e) {
-  var file = e.target.files[0];
-  if(!file) return;
-  if(file.size > 2 * 1024 * 1024) { toast('\u26A0\uFE0F Image trop grande (max 2 Mo)'); return; }
-  var reader = new FileReader();
-  reader.onload = function(ev) {
-    _pendingPhoto = ev.target.result;
-    var preview = document.getElementById('photo-preview');
-    var oldImg = preview.querySelector('img');
-    if(oldImg) oldImg.remove();
-    document.getElementById('photo-preview-placeholder').style.display = 'none';
-    var img = document.createElement('img');
-    img.src = _pendingPhoto;
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-    preview.appendChild(img);
-    document.getElementById('photo-delete').style.display = '';
-  };
-  reader.readAsDataURL(file);
-});
-
-// Drag & drop support
-var dropZone = document.getElementById('photo-drop');
-dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.style.borderColor='var(--violet2)'; });
-dropZone.addEventListener('dragleave', function(){ dropZone.style.borderColor=''; });
-dropZone.addEventListener('drop', function(e){
-  e.preventDefault(); dropZone.style.borderColor='';
-  var file = e.dataTransfer.files[0];
-  if(!file || !file.type.startsWith('image/')) return;
-  document.getElementById('photo-file-input').files; // trigger same flow
-  var reader = new FileReader();
-  reader.onload = function(ev){
-    _pendingPhoto = ev.target.result;
-    var preview = document.getElementById('photo-preview');
-    var oldImg = preview.querySelector('img');
-    if(oldImg) oldImg.remove();
-    document.getElementById('photo-preview-placeholder').style.display = 'none';
-    var img = document.createElement('img');
-    img.src = _pendingPhoto;
-    img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-    preview.appendChild(img);
-    document.getElementById('photo-delete').style.display = '';
-  };
-  reader.readAsDataURL(file);
-});
-
-document.getElementById('photo-cancel').addEventListener('click', function(){
-  document.getElementById('modal-photo').classList.remove('open');
-  _pendingPhoto = null;
-});
-
-document.getElementById('photo-delete').addEventListener('click', function(){
-  if(!confirm('Supprimer votre photo de profil ?')) return;
-  localStorage.removeItem('lv_avatar');
-  _pendingPhoto = null;
-  document.getElementById('modal-photo').classList.remove('open');
-  // Sync to Supabase
-  var uid = localStorage.getItem('lv_uid');
-  if(uid) _supa.from('public_profiles').update({ avatar: null }).eq('id', uid).then(function(){});
-  if(uid) _supa.from('profiles').update({ avatar: null }).eq('id', uid).then(function(){});
-  toast('\uD83D\uDDD1\uFE0F Photo supprim\u00e9e');
-  if(document.getElementById('screen-profil').classList.contains('active')) renderProfil();
-  setTimeout(syncPublicProfile, 500);
-});
-
-document.getElementById('photo-save').addEventListener('click', async function(){
-  if(!_pendingPhoto) { toast('\u26A0\uFE0F Choisissez d\u2019abord une photo'); return; }
-  var btn = document.getElementById('photo-save');
-  btn.textContent = '\u23F3 Enregistrement\u2026'; btn.disabled = true;
-  try {
-    localStorage.setItem('lv_avatar', _pendingPhoto);
-    // Sync to Supabase profiles + public_profiles
-    var uid = localStorage.getItem('lv_uid');
-    if(uid) {
-      await _supa.from('profiles').update({ avatar: _pendingPhoto }).eq('id', uid);
-      await _supa.from('public_profiles').upsert({ id: uid, avatar: _pendingPhoto, updated_at: new Date().toISOString() }, { onConflict: 'id' });
-    }
-    document.getElementById('modal-photo').classList.remove('open');
+  async function acceptExchange(id){
+    try{await _supa.from('book_exchanges').update({status:'accepted'}).eq('id',id);
+    toast('✅ Échange accepté ! Coordonnez-vous pour l’échange physique 🤝');
+    if($id('screen-social').classList.contains('active'))renderSocial();}catch(e){toast('⚠️ Erreur');}
+  }
+  async function declineExchange(id){
+    try{await _supa.from('book_exchanges').update({status:'declined'}).eq('id',id);
+    toast('Proposition refusée');
+    if($id('screen-social').classList.contains('active'))renderSocial();}catch(e){toast('⚠️ Erreur');}
+  }
+  
+  
+  // ════════════════════════════════════════════
+  // PHOTO DE PROFIL
+  // ════════════════════════════════════════════
+  var _pendingPhoto = null;
+  
+  function openPhotoModal() {
     _pendingPhoto = null;
-    toast('\u2705 Photo de profil mise \u00e0 jour !');
-    if(document.getElementById('screen-profil').classList.contains('active')) renderProfil();
-    setTimeout(syncPublicProfile, 500);
-  } catch(e) {
-    toast('\u26A0\uFE0F Erreur lors de l\u2019enregistrement');
-    console.error(e);
+    var preview = document.getElementById('photo-preview');
+    var placeholder = document.getElementById('photo-preview-placeholder');
+    var av = DB.avatar();
+    if(av) {
+      placeholder.style.display = 'none';
+      var oldImg = preview.querySelector('img');
+      if(oldImg) oldImg.remove();
+      var img = document.createElement('img');
+      img.src = av;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+      preview.appendChild(img);
+    } else {
+      placeholder.style.display = '';
+      var oldImg2 = preview.querySelector('img');
+      if(oldImg2) oldImg2.remove();
+    }
+    var delBtn = document.getElementById('photo-delete');
+    if(delBtn) delBtn.style.display = av ? '' : 'none';
+    var modal = document.getElementById('modal-photo');
+    if(modal) modal.classList.add('open');
   }
-  btn.textContent = '\uD83D\uDCBE Enregistrer'; btn.disabled = false;
+  
+  function _initPhotoListeners() {
+    var fileInput = document.getElementById('photo-file-input');
+    if(fileInput) {
+      fileInput.addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if(!file) return;
+        if(file.size > 2 * 1024 * 1024) { toast('\u26A0\uFE0F Image trop grande (max 2 Mo)'); return; }
+        var reader = new FileReader();
+        reader.onload = function(ev) {
+          _pendingPhoto = ev.target.result;
+          var preview = document.getElementById('photo-preview');
+          var oldImg = preview ? preview.querySelector('img') : null;
+          if(oldImg) oldImg.remove();
+          var ph = document.getElementById('photo-preview-placeholder');
+          if(ph) ph.style.display = 'none';
+          var img = document.createElement('img');
+          img.src = _pendingPhoto;
+          img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+          if(preview) preview.appendChild(img);
+          var del = document.getElementById('photo-delete');
+          if(del) del.style.display = '';
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  
+    var dropZone = document.getElementById('photo-drop');
+    if(dropZone) {
+      dropZone.addEventListener('dragover', function(e){ e.preventDefault(); dropZone.style.borderColor='var(--violet2)'; });
+      dropZone.addEventListener('dragleave', function(){ dropZone.style.borderColor=''; });
+      dropZone.addEventListener('drop', function(e){
+        e.preventDefault(); dropZone.style.borderColor='';
+        var file = e.dataTransfer.files[0];
+        if(!file || !file.type.startsWith('image/')) return;
+        var reader = new FileReader();
+        reader.onload = function(ev){
+          _pendingPhoto = ev.target.result;
+          var preview = document.getElementById('photo-preview');
+          var oldImg = preview ? preview.querySelector('img') : null;
+          if(oldImg) oldImg.remove();
+          var ph = document.getElementById('photo-preview-placeholder');
+          if(ph) ph.style.display = 'none';
+          var img = document.createElement('img');
+          img.src = _pendingPhoto;
+          img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+          if(preview) preview.appendChild(img);
+          var del = document.getElementById('photo-delete');
+          if(del) del.style.display = '';
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  
+    $on('photo-cancel', 'click', function(){
+      document.getElementById('modal-photo').classList.remove('open');
+      _pendingPhoto = null;
+    });
+  
+    $on('photo-delete', 'click', function(){
+      if(!confirm('Supprimer votre photo de profil ?')) return;
+      localStorage.removeItem('lv_avatar');
+      _pendingPhoto = null;
+      document.getElementById('modal-photo').classList.remove('open');
+      var uid = localStorage.getItem('lv_uid');
+      if(uid) {
+        _supa.from('public_profiles').update({ avatar: null }).eq('id', uid).then(function(){});
+        _supa.from('profiles').update({ avatar: null }).eq('id', uid).then(function(){});
+      }
+      toast('\uD83D\uDDD1\uFE0F Photo supprim\u00e9e');
+      if(document.getElementById('screen-profil').classList.contains('active')) renderProfil();
+      setTimeout(syncPublicProfile, 500);
+    });
+  
+    $on('photo-save', 'click', async function(){
+      if(!_pendingPhoto) { toast('\u26A0\uFE0F Choisissez d\u2019abord une photo'); return; }
+      var btn = document.getElementById('photo-save');
+      btn.textContent = '\u23F3 Enregistrement\u2026'; btn.disabled = true;
+      try {
+        localStorage.setItem('lv_avatar', _pendingPhoto);
+        var uid = localStorage.getItem('lv_uid');
+        if(uid) {
+          await _supa.from('profiles').update({ avatar: _pendingPhoto }).eq('id', uid);
+          await _supa.from('public_profiles').upsert({ id: uid, avatar: _pendingPhoto, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+        }
+        document.getElementById('modal-photo').classList.remove('open');
+        _pendingPhoto = null;
+        toast('\u2705 Photo de profil mise \u00e0 jour !');
+        if(document.getElementById('screen-profil').classList.contains('active')) renderProfil();
+        setTimeout(syncPublicProfile, 500);
+      } catch(e) {
+        toast('\u26A0\uFE0F Erreur lors de l\u2019enregistrement');
+      }
+      btn.textContent = '\uD83D\uDCBE Enregistrer'; btn.disabled = false;
+    });
+}
+}
+
+
+// Init photo listeners after DOM (separate from initApp IIFE scope)
+document.addEventListener('DOMContentLoaded', function() {
+  if(typeof _initPhotoListeners === 'function') _initPhotoListeners();
 });
 
 // ════════════════════════════════════════════
@@ -2697,8 +2728,9 @@ if('serviceWorker' in navigator) {
 // ════════════════════════════════════════════
 (function initApp() {
 
-  // Indique si on a déjà navigué vers l'app (évite les doubles redirections)
   var _navigated = false;
+  // Augment fallback timeout — Supabase session restore can be slow on cold start
+  var FALLBACK_MS = 4000;
 
   function goToApp() {
     if(_navigated) return;
@@ -2714,34 +2746,42 @@ if('serviceWorker' in navigator) {
   }
 
   function goToAuth() {
-    if(_navigated) return; // Déjà connecté, ne pas renvoyer vers l'auth
+    if(_navigated) return;
     var splash = document.getElementById('splash');
     var auth   = document.getElementById('screen-auth');
     if(splash) splash.classList.remove('active');
     if(auth)   auth.classList.add('active');
   }
 
-  // ── Écoute permanente des changements d'état d'auth Supabase ──
-  // Ceci gère : connexion, déconnexion, expiration de token, refresh automatique
+  // ── Persistent auth listener ──
+  // Handles: SIGNED_IN, INITIAL_SESSION, TOKEN_REFRESHED, SIGNED_OUT
   _supa.auth.onAuthStateChange(function(event, session) {
-    if(event === 'SIGNED_IN' && session) {
-      // Charger le profil et les données
+
+    if((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+      // Load profile + data then navigate
+      var uid = session.user.id;
+      localStorage.setItem('lv_uid', uid);
       Promise.all([
-        _supa.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
-        cloudLoad(session.user.id)
+        _supa.from('profiles').select('*').eq('id', uid).maybeSingle(),
+        cloudLoad(uid)
       ]).then(function(results) {
-        var profile = results[0].data;
+        var profile = results[0] && results[0].data;
         if(profile) {
           localStorage.setItem('lv_username', profile.pseudo || 'Lecteur');
           localStorage.setItem('lv_mycode',   profile.code   || DB.myCode());
-          localStorage.setItem('lv_uid',      session.user.id);
           if(profile.avatar) localStorage.setItem('lv_avatar', profile.avatar);
         }
         goToApp();
-      }).catch(function() { goToApp(); });
+      }).catch(function(e) {
+        console.warn('Profile load error:', e);
+        goToApp(); // Still go to app — data will sync later
+      });
+
+    } else if(event === 'INITIAL_SESSION' && !session) {
+      // Supabase confirmed: no active session
+      goToAuth();
 
     } else if(event === 'SIGNED_OUT') {
-      // Vraie déconnexion — réinitialiser
       _navigated = false;
       localStorage.removeItem('lv_uid');
       localStorage.removeItem('lv_guest');
@@ -2750,37 +2790,60 @@ if('serviceWorker' in navigator) {
       if(auth) auth.classList.add('active');
       if(typeof switchAuthTab === 'function') switchAuthTab('signup');
 
-    } else if(event === 'TOKEN_REFRESHED') {
-      // Token rafraîchi silencieusement — pas de redirection
-      if(session) localStorage.setItem('lv_uid', session.user.id);
+    } else if(event === 'TOKEN_REFRESHED' && session) {
+      localStorage.setItem('lv_uid', session.user.id);
     }
   });
 
-  // ── Au chargement du DOM ──
+  // ── DOM ready ──
   document.addEventListener('DOMContentLoaded', function() {
-    // Mode invité : aller directement dans l'app
+
+    // Init all UI event listeners (guarantee DOM exists)
+    _wireUI();
+
+    // Guest mode: bypass auth entirely
     if(localStorage.getItem('lv_guest') === '1') {
       goToApp();
       return;
     }
 
-    // Si la session a déjà été vérifiée par le script inline (avant DOM)
-    // on attend un court délai pour que onAuthStateChange déclenche
-    // Si après 2s rien ne s'est passé → afficher l'écran d'auth
-    var fallbackTimer = setTimeout(function() {
-      if(!_navigated) goToAuth();
-    }, 2000);
+    // Safety net: if onAuthStateChange hasn't fired within FALLBACK_MS,
+    // try getSession() manually as last resort
+    var fallback = setTimeout(function() {
+      if(_navigated) return;
+      _supa.auth.getSession().then(function(r) {
+        if(r.data && r.data.session) {
+          // Has session but onAuthStateChange was late — go to app
+          goToApp();
+        } else {
+          // Definitely no session
+          goToAuth();
+        }
+      }).catch(function() {
+        goToAuth();
+      });
+    }, FALLBACK_MS);
 
-    // Si _sessionReady est déjà positionné → aller dans l'app tout de suite
+    // If inline session check already confirmed session — no need to wait
     if(window._sessionReady) {
-      clearTimeout(fallbackTimer);
+      clearTimeout(fallback);
       goToApp();
     }
   });
 
-})();
-</script>
+})();</script>
 
+
+<!-- MODAL: BADGE DETAIL -->
+<div class="modal-overlay" id="modal-badge">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div id="badge-detail-content" style="text-align:center;padding-bottom:8px"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="document.getElementById('modal-badge').classList.remove('open')">Fermer</button>
+    </div>
+  </div>
+</div>
 <!-- MODAL: PHOTO DE PROFIL -->
 <div class="modal-overlay" id="modal-photo">
   <div class="modal">

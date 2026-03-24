@@ -1,4 +1,4 @@
-const CACHE = 'livroo-v2';
+const CACHE = 'livroo-v4';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
@@ -13,8 +13,20 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
+// Network-first strategy: always try network, fallback to cache
+// This ensures updates are picked up immediately
 self.addEventListener('fetch', e => {
-  e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+  if(e.request.method !== 'GET') return;
+  e.respondWith(
+    fetch(e.request)
+      .then(response => {
+        // Cache the fresh response
+        var r = response.clone();
+        caches.open(CACHE).then(c => c.put(e.request, r));
+        return response;
+      })
+      .catch(() => caches.match(e.request))
+  );
 });
 
 // Notifications push recues

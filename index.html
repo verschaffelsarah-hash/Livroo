@@ -2457,12 +2457,23 @@ async function renderRanking(){
   $id('ranking-list').innerHTML='<div class="loading"><div class="spinner"></div>Chargement…</div>';
   try{
     var res=await _supa.from('public_profiles').select('*').order('books_count',{ascending:false}).limit(50);
+    if(res.error) {
+      console.warn('Ranking error:', res.error.message, res.error.code, res.error.hint);
+      _rankData=[buildMyPublicProfile()];
+      $id('ranking-sub').textContent='Erreur : '+res.error.message;
+      renderRankingList();
+      return;
+    }
     _rankData=res.data||[];
     var uid=localStorage.getItem('lv_uid');
     if(uid&&!_rankData.find(function(u){return u.id===uid;}))_rankData.push(buildMyPublicProfile());
     $id('ranking-sub').textContent=_rankData.length+' lecteur'+(_rankData.length!==1?'s':'');
     renderRankingList();
-  }catch(e){_rankData=[buildMyPublicProfile()];renderRankingList();}
+  }catch(e){
+    console.warn('Ranking exception:',e);
+    _rankData=[buildMyPublicProfile()];
+    renderRankingList();
+  }
 }
 
 function buildMyPublicProfile(){
@@ -2485,11 +2496,13 @@ async function syncPublicProfile(){
   if(!uid||localStorage.getItem('lv_guest')==='1')return;
   try{
     var p=buildMyPublicProfile();
-    await _supa.from('public_profiles').upsert({id:uid,pseudo:p.pseudo,avatar:p.avatar,
+    var res=await _supa.from('public_profiles').upsert({id:uid,pseudo:p.pseudo,avatar:p.avatar,
       books_count:p.books_count,pages_count:p.pages_count,avg_note:p.avg_note,
       badges_count:p.badges_count,coups:p.coups,badges:p.badges,
       joined_at:p.joined_at,updated_at:new Date().toISOString()},{onConflict:'id'});
-  }catch(e){console.warn('syncPublicProfile:',e);}
+    if(res.error) console.warn('syncPublicProfile error:',res.error.message,res.error.code,res.error.hint);
+    else console.log('syncPublicProfile: OK, books='+p.books_count);
+  }catch(e){console.warn('syncPublicProfile exception:',e);}
 }
 
 function gradForUser(name){
@@ -2916,9 +2929,12 @@ if('serviceWorker' in navigator) {
           if(profile.avatar) localStorage.setItem('lv_avatar', profile.avatar);
         }
         goToApp();
+        // Sync public profile immediately after login
+        setTimeout(syncPublicProfile, 500);
       }).catch(function(e) {
         console.warn('Profile load error:', e);
-        goToApp(); // Still go to app — data will sync later
+        goToApp();
+        setTimeout(syncPublicProfile, 1000);
       });
 
     } else if(event === 'INITIAL_SESSION' && !session) {

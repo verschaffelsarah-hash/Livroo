@@ -1,4 +1,4 @@
-const CACHE = 'livroo-v4';
+const CACHE = 'livroo-v5';
 const ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
@@ -13,23 +13,38 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Network-first strategy: always try network, fallback to cache
-// This ensures updates are picked up immediately
 self.addEventListener('fetch', e => {
-  if(e.request.method !== 'GET') return;
+  const url = e.request.url;
+
+  // Never cache: API calls, Supabase, external resources
+  if(
+    url.includes('supabase.co') ||
+    url.includes('googleapis.com') ||
+    url.includes('openlibrary.org') ||
+    url.includes('unpkg.com') ||
+    url.includes('fonts.g') ||
+    e.request.method !== 'GET'
+  ) {
+    // Pass through directly, no caching
+    return;
+  }
+
+  // For app assets (index.html, sw.js, manifest): network-first
   e.respondWith(
     fetch(e.request)
       .then(response => {
-        // Cache the fresh response
-        var r = response.clone();
-        caches.open(CACHE).then(c => c.put(e.request, r));
+        // Only cache valid same-origin responses
+        if(response && response.status === 200 && response.type === 'basic') {
+          var r = response.clone();
+          caches.open(CACHE).then(c => c.put(e.request, r));
+        }
         return response;
       })
       .catch(() => caches.match(e.request))
   );
 });
 
-// Notifications push recues
+// Push notifications
 self.addEventListener('push', e => {
   let data = { title: 'Livroo', body: 'Nouvelle notification', screen: 'social' };
   try { if(e.data) data = Object.assign(data, e.data.json()); } catch(err) {}
@@ -46,7 +61,7 @@ self.addEventListener('push', e => {
   );
 });
 
-// Clic sur une notification
+// Notification click
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const screen = (e.notification.data && e.notification.data.screen) || 'social';
